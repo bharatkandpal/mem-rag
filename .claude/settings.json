@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'rag project — read PRD.md, TDD.md, GO-21.md, and .claude/rules/ before coding. Stack: NestJS + pgvector + Voyage adapter + claude-opus-4-8 (citations). Build order: GO-21a..g. Next: scaffold (GO-21a) if no package.json yet.'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/typecheck.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

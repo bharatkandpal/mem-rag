@@ -1,0 +1,13 @@
+# secrets — env only, never committed (TDD §3, rule ai-and-secrets)
+.env
+.env.*
+!.env.example
+
+# node
+node_modules/
+dist/
+coverage/
+*.log
+
+# os / editor
+.DS_Store
