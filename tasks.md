@@ -15,7 +15,7 @@
 - [x] RAG-5 — `GET /healthz` (DB reachable + pgvector present → 200/503)  · TDD §2.6
 - [x] RAG-6 — Dockerfile + `docker-compose.yml` (app + pgvector), `.dockerignore`  · TDD §4
 - [x] RAG-7 — `.env.example` with all keys  · TDD §3
-- [ ] RAG-8 — **Runtime-verify**: `docker compose up` → `/healthz` returns `ok` (db+pgvector true)  · GO-21a done-when
+- [x] RAG-8 — **Runtime-verify**: `docker compose up` → `/healthz` returns `ok` (db+pgvector true)  · GO-21a done-when
 
 ## Milestone GO-21b — Ingestion pipeline + embedding adapter  (PRD FR-1, FR-2)
 
