@@ -7,7 +7,9 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",
@@ -20,8 +22,11 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
+    "@types/jest": "^29.5.13",
     "@types/node": "^22.7.0",
     "@types/pg": "^8.11.10",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
     "typescript": "^5.6.0"
   }
 }

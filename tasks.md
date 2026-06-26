@@ -19,9 +19,9 @@
 
 ## Milestone GO-21b — Ingestion pipeline + embedding adapter  (PRD FR-1, FR-2)
 
-- [ ] RAG-9 — `EmbeddingProvider` interface (`dims`, `embed()`)  · TDD §2.1
-- [ ] RAG-10 — `VoyageEmbeddingProvider` (default, `voyage-3`)  · TDD §2.1, D3
-- [ ] RAG-11 — Provider factory selected by `EMBEDDING_PROVIDER` env  · TDD §2.1
+- [x] RAG-9 — `EmbeddingProvider` interface (`dims`, `embed()`)  · TDD §2.1
+- [x] RAG-10 — `VoyageEmbeddingProvider` (default, `voyage-3`)  · TDD §2.1, D3
+- [x] RAG-11 — Provider factory selected by `EMBEDDING_PROVIDER` env  · TDD §2.1
 - [ ] RAG-12 — `VectorStore` interface (`upsert`, `search`)  · TDD §2.2
 - [ ] RAG-13 — `PgVectorStore.upsert()` (idempotent on `UNIQUE(doc_id, chunk_index)`)  · TDD §2.2
 - [ ] RAG-14 — Document loader (md / txt / pdf)  · TDD §2.3
@@ -72,7 +72,7 @@
 
 - [ ] RAG-42 — Structured logging baseline (pino or Nest logger)  · TDD §3
 - [ ] RAG-43 — Secrets env-only; confirm none committed/logged  · rule `ai-and-secrets.md`
-- [ ] RAG-44 — Jest setup + unit tests (chunking, adapters)  · TDD §3
+- [~] RAG-44 — Jest setup + unit tests (chunking, adapters)  · TDD §3 — Jest (ts-jest) configured + Voyage adapter spec done; chunking test pending RAG-15
 - [ ] RAG-45 — Integration test: `/query` happy path  · TDD §3
 - [ ] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4
 - [ ] RAG-47 — Pin deps / lockfile committed; clean commit history  · PRD §5
