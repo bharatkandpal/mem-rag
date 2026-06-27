@@ -22,8 +22,8 @@
 - [x] RAG-9 — `EmbeddingProvider` interface (`dims`, `embed()`)  · TDD §2.1
 - [x] RAG-10 — `VoyageEmbeddingProvider` (default, `voyage-3`)  · TDD §2.1, D3
 - [x] RAG-11 — Provider factory selected by `EMBEDDING_PROVIDER` env  · TDD §2.1
-- [ ] RAG-12 — `VectorStore` interface (`upsert`, `search`)  · TDD §2.2
-- [ ] RAG-13 — `PgVectorStore.upsert()` (idempotent on `UNIQUE(doc_id, chunk_index)`)  · TDD §2.2
+- [~] RAG-12 — `VectorStore` interface (`upsert`, `search`)  · TDD §2.2 — `upsert` defined; `search` added at RAG-21 (eval-gated)
+- [x] RAG-13 — `PgVectorStore.upsert()` (idempotent on `UNIQUE(doc_id, chunk_index)`)  · TDD §2.2
 - [ ] RAG-14 — Document loader (md / txt / pdf)  · TDD §2.3
 - [ ] RAG-15 — Token-aware chunker with overlap  · TDD §2.3
 - [ ] RAG-16 — Ingestion service: load → chunk → embed → upsert  · TDD §2.3

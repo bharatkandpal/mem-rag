@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/`.
 >
-> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11).
+> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11) + vector-store seam (RAG-12/13).
 
 ---
 
@@ -19,8 +19,26 @@
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
 - **Defines:** `AppModule` (class)
-- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `HealthModule`
+- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `HealthModule`
 - **Used by:** `src/main.ts`
+
+### `src/vector-store/vector-store.interface.ts`
+- **Purpose:** The vector-store swap point (TDD §2.2) — ingestion/retrieval depend on this, never on pgvector directly.
+- **Defines:** `VectorStore` (interface: `upsert`; `search` added at RAG-21) · `ChunkInput` (interface) · `VECTOR_STORE` (DI token, const)
+- **Used by:** `src/vector-store/pgvector.store.ts` (implements) · `src/vector-store/vector-store.module.ts` (binds token)
+
+### `src/vector-store/pgvector.store.ts`
+- **Purpose:** Postgres + pgvector impl — idempotent batch `upsert` (ON CONFLICT on `(doc_id, chunk_index)`). All SQL/pgvector specifics contained here.
+- **Defines:** `PgVectorStore` (class) · `PgVectorStore.upsert(): Promise<number>`
+- **Depends on:** `VectorStore`/`ChunkInput` (interface), `Pool` (`pg`, ctor arg), `Logger`
+- **Used by:** `src/vector-store/vector-store.module.ts` (factory)
+
+### `src/vector-store/vector-store.module.ts`
+- **Purpose:** Global module — binds `VECTOR_STORE` token to `PgVectorStore` over the shared `PG_POOL`.
+- **Defines:** `VectorStoreModule` (class, `@Global`) · provider factory (`useFactory` → `new PgVectorStore(pool)`)
+- **Exports:** `VECTOR_STORE`
+- **Depends on:** `PG_POOL`, `PgVectorStore`
+- **Used by:** `src/app.module.ts` (import); token injected by ingestion/retrieval in later milestones
 
 ### `src/embedding/embedding-provider.interface.ts`
 - **Purpose:** The embedding swap point (TDD §2.1) — ingestion/retrieval depend on this, never on a concrete provider.
@@ -73,6 +91,11 @@
 | `EMBEDDING_PROVIDER` | DI token | `src/embedding/embedding-provider.interface.ts` | `src/embedding/embedding.module.ts` |
 | `VoyageEmbeddingProvider` | class | `src/embedding/voyage-embedding.provider.ts` | `src/embedding/embedding.module.ts` |
 | `EmbeddingModule` | class | `src/embedding/embedding.module.ts` | `src/app.module.ts` |
+| `VectorStore` | interface | `src/vector-store/vector-store.interface.ts` | pgvector store, vector-store module (+ ingestion/retrieval later) |
+| `ChunkInput` | interface | `src/vector-store/vector-store.interface.ts` | `src/vector-store/pgvector.store.ts` (+ ingestion later) |
+| `VECTOR_STORE` | DI token | `src/vector-store/vector-store.interface.ts` | `src/vector-store/vector-store.module.ts` |
+| `PgVectorStore` | class | `src/vector-store/pgvector.store.ts` | `src/vector-store/vector-store.module.ts` |
+| `VectorStoreModule` | class | `src/vector-store/vector-store.module.ts` | `src/app.module.ts` |
 | `HealthModule` | class | `src/health/health.module.ts` | `src/app.module.ts` |
 | `HealthController` | class | `src/health/health.controller.ts` | `src/health/health.module.ts` |
 | `HealthController.check` | method | `src/health/health.controller.ts` | route `GET /healthz` |
