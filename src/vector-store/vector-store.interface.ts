@@ -12,8 +12,12 @@ export interface VectorStore {
    */
   upsert(chunks: ChunkInput[]): Promise<number>;
 
-  // search() is added in the retrieval milestone (RAG-21) — kept out of the
-  // interface until it can be backed by the eval harness (rule `evals.md`).
+  /**
+   * Cosine top-k nearest neighbours to the query embedding (RAG-21). Pure
+   * mechanism: returns the k closest chunks with their similarity score. The
+   * min-score floor and abstain policy live in the retrieval service, not here.
+   */
+  search(embedding: number[], k: number): Promise<RetrievedChunk[]>;
 }
 
 /** A chunk ready to persist: its text plus the embedding vector and provenance. */
@@ -23,6 +27,13 @@ export interface ChunkInput {
   chunkIndex: number;
   content: string;
   embedding: number[];
+}
+
+/** A retrieval hit: the chunk's text, its provenance, and cosine similarity (higher = closer). */
+export interface RetrievedChunk {
+  content: string;
+  source: string;
+  score: number;
 }
 
 /** DI token for the configured VectorStore. */

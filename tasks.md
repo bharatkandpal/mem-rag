@@ -33,11 +33,13 @@
 
 ## Milestone GO-21c — Retrieval  (PRD FR-3)
 
-- [ ] RAG-20 — Embed query via the configured adapter  · TDD §2.4
-- [ ] RAG-21 — `PgVectorStore.search()`: cosine top-k over HNSW  · TDD §2.4
-- [ ] RAG-22 — Min-score floor (config `MIN_SCORE`)  · TDD §2.4, D5
-- [ ] RAG-23 — Retrieval service returns `{ content, source, score }[]`  · TDD §2.4
-- [ ] RAG-24 — `RETRIEVAL_K` configurable  · TDD §3
+- [x] RAG-20 — Embed query via the configured adapter  · TDD §2.4
+- [x] RAG-21 — `PgVectorStore.search()`: cosine top-k over HNSW  · TDD §2.4
+- [x] RAG-22 — Min-score floor (config `MIN_SCORE`)  · TDD §2.4, D5
+- [x] RAG-23 — Retrieval service returns `{ content, source, score }[]`  · TDD §2.4
+- [x] RAG-24 — `RETRIEVAL_K` configurable  · TDD §3
+
+> ⚠️ Retrieval is implemented + unit-tested but **not yet eval-validated** — no quality claim until the eval harness (GO-21g) runs against real data (rule `evals.md`).
 
 ## Milestone GO-21d — Generation with citations  (PRD FR-4)
 

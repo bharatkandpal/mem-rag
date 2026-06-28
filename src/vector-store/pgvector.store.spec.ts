@@ -57,3 +57,31 @@ describe('PgVectorStore.upsert', () => {
     expect(await store.upsert([chunk(), chunk({ chunkIndex: 1 })])).toBe(2);
   });
 });
+
+describe('PgVectorStore.search', () => {
+  let queryMock: jest.Mock;
+  let store: PgVectorStore;
+
+  beforeEach(() => {
+    queryMock = jest.fn().mockResolvedValue({
+      rowCount: 1,
+      rows: [{ content: 'hit', source: 'a.md', score: '0.91' }],
+    });
+    store = new PgVectorStore({ query: queryMock } as unknown as Pool);
+  });
+
+  it('orders by cosine distance and limits to k', async () => {
+    await store.search([0.1, 0.2], 3);
+    const [sql, params] = queryMock.mock.calls[0];
+    expect(sql).toMatch(/embedding <=> \$1::vector/);
+    expect(sql).toMatch(/ORDER BY embedding <=> \$1::vector/);
+    expect(sql).toMatch(/LIMIT \$2/);
+    expect(params).toEqual(['[0.1,0.2]', 3]);
+  });
+
+  it('returns similarity (1 - distance) as a number', async () => {
+    const hits = await store.search([0.1], 5);
+    expect(hits).toEqual([{ content: 'hit', source: 'a.md', score: 0.91 }]);
+    expect(typeof hits[0].score).toBe('number');
+  });
+});

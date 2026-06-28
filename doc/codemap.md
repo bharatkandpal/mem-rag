@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/`.
 >
-> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11), vector-store seam (RAG-12/13), loader + chunker (RAG-14/15), ingestion service + /ingest (RAG-16/17).
+> **Last updated:** GO-21c — retrieval: VectorStore.search + RetrievalService (RAG-20-24). (GO-21b complete.)
 
 ---
 
@@ -19,8 +19,19 @@
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
 - **Defines:** `AppModule` (class)
-- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `HealthModule`
+- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `HealthModule`
 - **Used by:** `src/main.ts`
+
+### `src/retrieval/retrieval.service.ts`
+- **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy (config); returns `[]` to enable abstain (D5).
+- **Defines:** `RetrievalService` (class) · `RetrievalService.retrieve(query): Promise<RetrievedChunk[]>` · `toNumber` (file-private)
+- **Depends on:** `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`RETRIEVAL_K`/`MIN_SCORE`)
+- **Used by:** `src/retrieval/retrieval.module.ts`; consumed by generation (RAG-27)
+
+### `src/retrieval/retrieval.module.ts`
+- **Purpose:** Retrieval feature module — provides + exports `RetrievalService` (no controller; reached via `/query`).
+- **Defines:** `RetrievalModule` (class)
+- **Used by:** `src/app.module.ts`
 
 ### `src/ingestion/ingestion.service.ts`
 - **Purpose:** The ingestion pipeline (RAG-16) — `load → chunk → embed → upsert`; thin orchestrator over the loader + the two adapter interfaces.
@@ -59,12 +70,12 @@
 
 ### `src/vector-store/vector-store.interface.ts`
 - **Purpose:** The vector-store swap point (TDD §2.2) — ingestion/retrieval depend on this, never on pgvector directly.
-- **Defines:** `VectorStore` (interface: `upsert`; `search` added at RAG-21) · `ChunkInput` (interface) · `VECTOR_STORE` (DI token, const)
+- **Defines:** `VectorStore` (interface: `upsert`, `search`) · `ChunkInput` (interface) · `RetrievedChunk` (interface) · `VECTOR_STORE` (DI token, const)
 - **Used by:** `src/vector-store/pgvector.store.ts` (implements) · `src/vector-store/vector-store.module.ts` (binds token)
 
 ### `src/vector-store/pgvector.store.ts`
-- **Purpose:** Postgres + pgvector impl — idempotent batch `upsert` (ON CONFLICT on `(doc_id, chunk_index)`). All SQL/pgvector specifics contained here.
-- **Defines:** `PgVectorStore` (class) · `PgVectorStore.upsert(): Promise<number>`
+- **Purpose:** Postgres + pgvector impl — idempotent batch `upsert` (ON CONFLICT on `(doc_id, chunk_index)`) + cosine top-k `search` (`<=>` over HNSW). All SQL/pgvector specifics contained here.
+- **Defines:** `PgVectorStore` (class) · `PgVectorStore.upsert(): Promise<number>` · `PgVectorStore.search(): Promise<RetrievedChunk[]>`
 - **Depends on:** `VectorStore`/`ChunkInput` (interface), `Pool` (`pg`, ctor arg), `Logger`
 - **Used by:** `src/vector-store/vector-store.module.ts` (factory)
 
@@ -131,6 +142,9 @@
 | `VECTOR_STORE` | DI token | `src/vector-store/vector-store.interface.ts` | `src/vector-store/vector-store.module.ts` |
 | `PgVectorStore` | class | `src/vector-store/pgvector.store.ts` | `src/vector-store/vector-store.module.ts` |
 | `VectorStoreModule` | class | `src/vector-store/vector-store.module.ts` | `src/app.module.ts` |
+| `RetrievalService` | class | `src/retrieval/retrieval.service.ts` | retrieval module; generation (RAG-27) |
+| `RetrievalModule` | class | `src/retrieval/retrieval.module.ts` | `src/app.module.ts` |
+| `RetrievedChunk` | interface | `src/vector-store/vector-store.interface.ts` | pgvector `search`, retrieval service |
 | `IngestionService` | class | `src/ingestion/ingestion.service.ts` | ingestion controller, module |
 | `IngestStats` | interface | `src/ingestion/ingestion.service.ts` | ingestion service + controller (return type) |
 | `IngestionController` | class | `src/ingestion/ingestion.controller.ts` | `src/ingestion/ingestion.module.ts` |
@@ -162,8 +176,8 @@
 | `ANTHROPIC_API_KEY` | _(reserved — GO-21d generation)_ | — |
 | `VOYAGE_API_KEY` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider`) | — |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
-| `RETRIEVAL_K` | _(reserved — GO-21c retrieval)_ | 5 |
-| `MIN_SCORE` | _(reserved — GO-21c floor)_ | 0.2 |
+| `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` | 5 |
+| `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.2 |
 | `CHUNK_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 512 |
 | `OVERLAP_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 64 |
 

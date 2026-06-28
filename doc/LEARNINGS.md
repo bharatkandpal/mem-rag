@@ -129,6 +129,30 @@
 **How I handled it:** Built and booted the app with dummy creds and confirmed the DI graph resolved + routes mapped ("Nest application successfully started") before committing.
 **Explain it in one line:** "I boot the app as a smoke check because green unit tests don't prove the DI graph resolves."
 
+### pgvector's `<=>` is cosine *distance*, not similarity
+**Concept:** The `<=>` operator returns cosine *distance* (0 = identical, 2 = opposite). Similarity, the intuitive "higher = closer" score, is `1 - distance`.
+**Why it matters:** Get this backwards and your min-score floor rejects the *best* matches and keeps the worst. Ordering must be by distance ascending; the score you expose should be the converted similarity.
+**How I handled it:** `ORDER BY embedding <=> $1` for the top-k, and `SELECT 1 - (embedding <=> $1) AS score` for the exposed similarity. Unit-tested the SQL shape and the numeric conversion.
+**Explain it in one line:** "I order by pgvector's cosine distance but expose `1 - distance` as the score, because distance and similarity run opposite directions."
+
+### Separate policy from mechanism: the store does top-k, the service owns the floor
+**Concept:** `VectorStore.search` is a pure mechanism — "give me the k nearest." The min-score floor, the value of k, and the decision to return nothing are *policy*, and live in the retrieval service.
+**Why it matters:** Keeping the store policy-free means a different store swaps in without re-implementing the floor, and the abstain behaviour (D5) has one clear home. Mixing them would scatter retrieval policy across layers.
+**How I handled it:** `search(embedding, k)` returns scored hits; `RetrievalService` applies `MIN_SCORE` and returns `[]` when nothing clears it.
+**Explain it in one line:** "The vector store just returns top-k; the floor and abstain policy live in the retrieval service, so storage stays swappable."
+
+### Returning `[]` is a feature: it's what lets the system abstain
+**Concept:** When no hit clears the floor, retrieval returns an empty list — and generation will treat that as "not in the corpus" rather than free-generating (D5).
+**Why it matters:** A RAG system that answers when it retrieved nothing relevant fabricates. The empty result is the signal that makes grounding enforceable.
+**How I handled it:** Floor filter can legitimately empty the result; tested that case explicitly.
+**Explain it in one line:** "Empty retrieval is a designed outcome — it's the trigger for abstaining instead of hallucinating."
+
+### Env vars are strings — coerce numeric config
+**Concept:** `ConfigService.get('RETRIEVAL_K')` returns the string `"5"` when the env var is set, not a number; only the hard-coded default is a real number.
+**Why it matters:** String config sneaks through loose comparisons and surfaces as subtle bugs later (e.g. `"5" + 1` = `"51"`). Coerce at the boundary.
+**How I handled it:** A `toNumber(value, fallback)` helper that parses and falls back on non-finite — careful to let `0` through as a valid floor.
+**Explain it in one line:** "I coerce numeric env config at the edge, because everything from the environment is a string."
+
 ### Fail-fast config validation is a deliberate tradeoff
 **Concept:** The embedding factory constructs the provider at startup, and the provider's constructor throws on a missing `VOYAGE_API_KEY`. So the whole app refuses to boot without the key — `/healthz` included.
 **Why it matters:** Fail-fast surfaces a misconfiguration immediately instead of at the first `/ingest` call, but it couples *every* route's availability to the embedding key. For a demo where the key is required anyway, that's the right call; in a system where health must report during partial outages, you'd construct lazily instead.

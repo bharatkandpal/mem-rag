@@ -4,6 +4,7 @@ import { DatabaseModule } from './database/database.module';
 import { EmbeddingModule } from './embedding/embedding.module';
 import { HealthModule } from './health/health.module';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { RetrievalModule } from './retrieval/retrieval.module';
 import { VectorStoreModule } from './vector-store/vector-store.module';
 
 @Module({
@@ -13,6 +14,7 @@ import { VectorStoreModule } from './vector-store/vector-store.module';
     EmbeddingModule,
     VectorStoreModule,
     IngestionModule,
+    RetrievalModule,
     HealthModule,
   ],
 })

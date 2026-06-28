@@ -22,7 +22,7 @@ describe('IngestionService', () => {
     loader = { load: jest.fn() };
     // Echo one vector per input so any chunk count works.
     embedder = { dims: 1024, embed: jest.fn(async (t: string[]) => t.map(() => [0.1])) };
-    store = { upsert: jest.fn(async (c: ChunkInput[]) => c.length) };
+    store = { upsert: jest.fn(async (c: ChunkInput[]) => c.length), search: jest.fn() };
     service = new IngestionService(
       loader as unknown as DocumentLoader,
       embedder,
