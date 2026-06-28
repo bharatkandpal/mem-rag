@@ -77,6 +77,7 @@
 - [ ] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4
 - [ ] RAG-47 — Pin deps / lockfile committed; clean commit history  · PRD §5
 - [~] RAG-50 — Keep `doc/codemap.md` current after every code change (ongoing)  · rule `coding-standards.md`, `codemap` skill
+- [~] RAG-51 — Append to `doc/LEARNINGS.md` after each build slice (ongoing)  · the revisit/teach log, distinct from ADRs
 
 ## Wrap-up
 

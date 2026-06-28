@@ -1,0 +1,114 @@
+# Learning Log
+
+> What I learned while building this, in a shape I can revisit and teach from.
+> Distinct from `DESIGN_DECISIONS.md` (which records *why a choice was made*) and
+> `codemap.md` (which is mechanical). One section per build slice; append as I go.
+>
+> Each entry: **Concept** (the idea) · **Why it matters** (the failure it prevents
+> or the leverage it gives) · **How I handled it** (what the code does) ·
+> **Explain it in one line** (the interview-ready narration — distil the best of
+> these up into `collateral/interview-scripts.md` when prepping).
+
+---
+
+## GO-21a · Containerisation
+
+### Multi-stage Docker builds throw away the toolchain
+**Concept:** A `build` stage has the full toolchain (npm, the TypeScript compiler); only the compiled `dist/` + production `node_modules` are copied into a separate runtime stage. The build stage never ships.
+**Why it matters:** Shipping build tools to production bloats the image and widens the attack surface for no runtime benefit.
+**How I handled it:** Two stages in the Dockerfile; `COPY --from=build` pulls only the artifacts into the runtime image.
+**Explain it in one line:** "The image that runs in prod contains only Node and my compiled app — the compiler stays in a discarded build stage."
+
+### Distroless images trade debuggability for a smaller attack surface
+**Concept:** A distroless runtime (`gcr.io/distroless/nodejs22`) contains Node + your app and nothing else — no shell, no package manager, no OS utilities — and runs as non-root.
+**Why it matters:** Far fewer CVEs, and an attacker who lands in the container has no `sh`/`curl` to pivot with. The cost: you can't `docker exec` in to poke around, and a healthcheck can't shell out — it has to be an HTTP probe.
+**How I handled it:** Runtime stage is distroless nonroot; health is an HTTP `GET /healthz`, not a shell command.
+**Explain it in one line:** "I chose distroless for the security win and accepted that debugging is HTTP-probe-only, not shell-in."
+
+---
+
+## GO-21b · Embedding adapter
+
+### The adapter (ports & adapters) pattern keeps providers swappable
+**Concept:** Ingestion/retrieval depend only on a narrow `EmbeddingProvider` interface (`dims`, `embed()`), never on the word "Voyage". The concrete provider is one implementation behind the seam, selected by env in a factory.
+**Why it matters:** Swapping the embedding model becomes a one-class change instead of a refactor — and it's the difference between "I wired up an API" and "I designed a system with no vendor lock-in."
+**How I handled it:** `EmbeddingProvider` interface + `VoyageEmbeddingProvider` impl + env-driven factory module; call sites inject the token.
+**Explain it in one line:** "Every consumer talks to the interface, so a new embedding model is a new class behind the same seam."
+
+### Batch APIs don't guarantee response order
+**Concept:** Embedding endpoints accept many inputs per call; the response may come back in a different order than sent (each item carries its own `index`).
+**Why it matters:** Pair chunk 5's text with chunk 2's vector and you've silently corrupted retrieval — no error ever fires. This is a correctness bug a type system won't catch.
+**How I handled it:** Re-sort the response by `index` before returning; unit-tested with a deliberately out-of-order mock.
+**Explain it in one line:** "I tested order-preservation because it's a silent-corruption bug, not a crash."
+
+### Design embedding as batch-first
+**Concept:** `embed(texts: string[]) → number[][]`, not one string at a time. Embedding cost/latency is dominated by request *count*, not token count.
+**Why it matters:** A per-chunk loop turns one fast batch call into N slow round-trips when ingesting a document.
+**How I handled it:** The interface only exposes the batch shape, so callers naturally batch.
+**Explain it in one line:** "The embedding seam is batch-first because the cost is per-request, not per-token."
+
+### Don't log the API key (or anything that might echo it)
+**Concept:** On an error, log the HTTP status — never the raw response body, which could echo the request including the key.
+**Why it matters:** Secrets in logs are a real leak vector; logs get shipped, indexed, and shared.
+**How I handled it:** Error messages include `status`/`statusText` only; the key lives in env and is never logged.
+**Explain it in one line:** "Failures log the status code, never the body — the body can contain the key."
+
+---
+
+## GO-21b · Vector store
+
+### `ON CONFLICT … DO UPDATE` is what makes ingestion idempotent
+**Concept:** A `UNIQUE(doc_id, chunk_index)` constraint plus an upsert means re-ingesting the same corpus updates rows in place instead of inserting duplicates.
+**Why it matters:** Without it, every re-index silently doubles your data — the same chunk appears 5×, crowding out everything else and corrupting retrieval.
+**How I handled it:** `INSERT … ON CONFLICT (doc_id, chunk_index) DO UPDATE SET …`; tested the SQL contains the conflict clause.
+**Explain it in one line:** "Re-ingestion is idempotent because the upsert keys on (doc_id, chunk_index), so chunks update in place."
+
+### The storage engine's quirks stay inside the adapter
+**Concept:** pgvector wants an embedding as the text `'[0.1,0.2,...]'` cast to `::vector`. That conversion lives only in `PgVectorStore`; the rest of the app passes plain `number[]`.
+**Why it matters:** If the encoding leaked out, swapping to Qdrant/Pinecone would mean touching every call site. The seam keeps the quirk contained.
+**How I handled it:** Encode + `::vector` cast inside `upsert`; the `VectorStore` interface speaks plain arrays.
+**Explain it in one line:** "Call sites pass arrays; only the pgvector adapter knows the `'[…]'::vector` encoding."
+
+### Batch the insert, don't loop
+**Concept:** One `INSERT` with N value tuples beats N single-row inserts in a loop (same instinct as batch-first embedding).
+**Why it matters:** A round-trip per chunk makes ingesting a large document painfully slow.
+**How I handled it:** Build one parameterised multi-row insert with offset placeholders.
+**Explain it in one line:** "Ingestion does one multi-row insert per batch, not a round-trip per chunk."
+
+---
+
+## GO-21b · Chunking
+
+### Recursive structure-aware splitting keeps ideas intact
+**Concept:** Split on the coarsest natural boundary that fits the budget — paragraph → line → sentence → word — instead of blindly slicing every N tokens.
+**Why it matters:** Chunking is the single biggest lever on retrieval quality. Blind cuts sever sentences, which both embed worse and return incoherent passages.
+**How I handled it:** A recursive `segment()` that descends a separator hierarchy, preserving separators so concatenation reproduces the source (no dropped text).
+**Explain it in one line:** "I split at the coarsest natural boundary under budget, so chunks are whole ideas, not arbitrary slices."
+
+### Overlap is carried context — and it changes the size invariant
+**Concept:** Each chunk is seeded with the trailing ~`overlapTokens` of the previous one. The budget is measured on *new* content, so the real ceiling is `chunkTokens + overlapTokens`, not `chunkTokens`.
+**Why it matters:** Overlap stops a fact that straddles a boundary from being lost to both chunks. And knowing the true bound (and testing it) is what separates "I used a chunker" from "I wrote one and know its limits."
+**How I handled it:** Token-level seed via `tailByTokens`; the test asserts `≤ chunkTokens + overlapTokens` and that total tokens grow when overlap is enabled.
+**Explain it in one line:** "Overlap carries boundary context, so each chunk holds up to CHUNK_TOKENS of new content plus the OVERLAP_TOKENS seed."
+
+### "Token-aware" should mean a real tokenizer
+**Concept:** Measure chunk size with an actual tokenizer (`gpt-tokenizer`), not a chars/4 heuristic — and wrap it so the tokenizer stays swappable.
+**Why it matters:** Heuristic counts drift from what models actually see; a real count makes the budget honest. (It's still an *approximation* of Voyage's exact tokenizer, but it only governs budgeting, where consistency matters more than vendor-exact counts.)
+**How I handled it:** `countTokens`/`splitByTokens`/`tailByTokens` in one `tokenizer.ts` wrapper.
+**Explain it in one line:** "Chunk budgeting uses a real tokenizer behind a one-file wrapper, so 'token-aware' is literal and the tokenizer is swappable."
+
+---
+
+## Cross-cutting
+
+### Grow the interface as you build, don't speculate
+**Concept:** The `VectorStore` interface ships with only `upsert` now; `search` is added when retrieval is built — and can be eval-backed.
+**Why it matters:** A stubbed `search` that throws is dead weight, and writing retrieval before there's an eval harness means tuning by vibes (which the project rules forbid).
+**How I handled it:** Interface carries only what's implemented; a comment marks where `search` lands (RAG-21).
+**Explain it in one line:** "I grow interfaces as features land rather than stubbing speculative methods I can't yet test."
+
+### NestJS DI: depend on tokens, not concrete classes
+**Concept:** Services inject DI tokens (`EMBEDDING_PROVIDER`, `VECTOR_STORE`) bound by factory providers; a `@Global` module exports the token so consumers don't re-import.
+**Why it matters:** This is the mechanism that makes the adapter seams real at runtime — the orchestrator never names a concrete provider, so swapping one is a factory change.
+**How I handled it:** Factory providers in `@Global` modules; tokens injected via `@Inject`.
+**Explain it in one line:** "Wiring is by token, not class, so the swap seams hold all the way down to the DI container."
