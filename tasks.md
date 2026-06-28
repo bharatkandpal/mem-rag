@@ -26,10 +26,10 @@
 - [x] RAG-13 — `PgVectorStore.upsert()` (idempotent on `UNIQUE(doc_id, chunk_index)`)  · TDD §2.2
 - [~] RAG-14 — Document loader (md / txt / pdf)  · TDD §2.3 — md/txt done + tested; PDF deferred to its own slice (D9)
 - [x] RAG-15 — Token-aware chunker with overlap  · TDD §2.3 — recursive structure-aware, eval-tunable (D9)
-- [ ] RAG-16 — Ingestion service: load → chunk → embed → upsert  · TDD §2.3
-- [ ] RAG-17 — `POST /ingest` ({ path } → stats)  · TDD §2.6
-- [ ] RAG-18 — Structured logs on ingest (docs, chunks, ms)  · TDD §3
-- [ ] RAG-19 — Verify re-ingest is idempotent (row count stable)  · TDD §2.3
+- [x] RAG-16 — Ingestion service: load → chunk → embed → upsert  · TDD §2.3
+- [x] RAG-17 — `POST /ingest` ({ path } → stats)  · TDD §2.6
+- [x] RAG-18 — Structured logs on ingest (docs, chunks, ms)  · TDD §3
+- [~] RAG-19 — Verify re-ingest is idempotent (row count stable)  · TDD §2.3 — store-level ON CONFLICT unit-tested; live row-count check pending smoke-test (needs DB + key)
 
 ## Milestone GO-21c — Retrieval  (PRD FR-3)
 

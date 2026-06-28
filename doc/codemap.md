@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/`.
 >
-> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11), vector-store seam (RAG-12/13), loader + chunker (RAG-14/15).
+> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11), vector-store seam (RAG-12/13), loader + chunker (RAG-14/15), ingestion service + /ingest (RAG-16/17).
 
 ---
 
@@ -19,8 +19,25 @@
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
 - **Defines:** `AppModule` (class)
-- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `HealthModule`
+- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `HealthModule`
 - **Used by:** `src/main.ts`
+
+### `src/ingestion/ingestion.service.ts`
+- **Purpose:** The ingestion pipeline (RAG-16) — `load → chunk → embed → upsert`; thin orchestrator over the loader + the two adapter interfaces.
+- **Defines:** `IngestionService` (class) · `IngestionService.ingest(path): Promise<IngestStats>` · `IngestStats` (interface)
+- **Depends on:** `DocumentLoader`, `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`CHUNK_TOKENS`/`OVERLAP_TOKENS`), `chunk` (`./chunker`)
+- **Used by:** `src/ingestion/ingestion.controller.ts`, `src/ingestion/ingestion.module.ts`
+
+### `src/ingestion/ingestion.controller.ts`
+- **Purpose:** `POST /ingest { path }` (RAG-17) — validates input, delegates to the service.
+- **Defines:** `IngestionController` (class) · `IngestionController.ingest(body): Promise<IngestStats>`
+- **Depends on:** `IngestionService`
+- **Used by:** `src/ingestion/ingestion.module.ts` (controller); route consumed by clients
+
+### `src/ingestion/ingestion.module.ts`
+- **Purpose:** Ingestion feature module — provides `IngestionService` + `DocumentLoader`, registers the controller.
+- **Defines:** `IngestionModule` (class)
+- **Used by:** `src/app.module.ts`
 
 ### `src/ingestion/document-loader.ts`
 - **Purpose:** Load a corpus (file or dir) into `LoadedDocument[]` (RAG-14). Handles `.md`/`.txt`, skips others; PDF is a later slice.
@@ -114,10 +131,14 @@
 | `VECTOR_STORE` | DI token | `src/vector-store/vector-store.interface.ts` | `src/vector-store/vector-store.module.ts` |
 | `PgVectorStore` | class | `src/vector-store/pgvector.store.ts` | `src/vector-store/vector-store.module.ts` |
 | `VectorStoreModule` | class | `src/vector-store/vector-store.module.ts` | `src/app.module.ts` |
-| `DocumentLoader` | class | `src/ingestion/document-loader.ts` | ingestion service (RAG-16) |
-| `LoadedDocument` | interface | `src/ingestion/document-loader.ts` | ingestion service (RAG-16) |
-| `chunk` | function | `src/ingestion/chunker.ts` | ingestion service (RAG-16) |
-| `TextChunk` | interface | `src/ingestion/chunker.ts` | ingestion service (RAG-16) |
+| `IngestionService` | class | `src/ingestion/ingestion.service.ts` | ingestion controller, module |
+| `IngestStats` | interface | `src/ingestion/ingestion.service.ts` | ingestion service + controller (return type) |
+| `IngestionController` | class | `src/ingestion/ingestion.controller.ts` | `src/ingestion/ingestion.module.ts` |
+| `IngestionModule` | class | `src/ingestion/ingestion.module.ts` | `src/app.module.ts` |
+| `DocumentLoader` | class | `src/ingestion/document-loader.ts` | `src/ingestion/ingestion.service.ts` |
+| `LoadedDocument` | interface | `src/ingestion/document-loader.ts` | `src/ingestion/ingestion.service.ts` |
+| `chunk` | function | `src/ingestion/chunker.ts` | `src/ingestion/ingestion.service.ts` |
+| `TextChunk` | interface | `src/ingestion/chunker.ts` | `src/ingestion/ingestion.service.ts` |
 | `ChunkOptions` / `DEFAULT_CHUNK_OPTIONS` | interface/const | `src/ingestion/chunker.ts` | chunker, ingestion config (RAG-16) |
 | `countTokens` / `splitByTokens` / `tailByTokens` | functions | `src/ingestion/tokenizer.ts` | `src/ingestion/chunker.ts` |
 | `HealthModule` | class | `src/health/health.module.ts` | `src/app.module.ts` |
@@ -130,6 +151,7 @@
 | Method | Path | Handler | File |
 |--------|------|---------|------|
 | GET | `/healthz` | `HealthController.check` | `src/health/health.controller.ts` |
+| POST | `/ingest` | `IngestionController.ingest` | `src/ingestion/ingestion.controller.ts` |
 
 ## Env vars → read in
 
@@ -142,8 +164,8 @@
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
 | `RETRIEVAL_K` | _(reserved — GO-21c retrieval)_ | 5 |
 | `MIN_SCORE` | _(reserved — GO-21c floor)_ | 0.2 |
-| `CHUNK_TOKENS` | _(read by ingestion service at RAG-16; default in `DEFAULT_CHUNK_OPTIONS`)_ | 512 |
-| `OVERLAP_TOKENS` | _(read by ingestion service at RAG-16; default in `DEFAULT_CHUNK_OPTIONS`)_ | 64 |
+| `CHUNK_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 512 |
+| `OVERLAP_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 64 |
 
 ## Non-code assets (referenced by build/runtime)
 

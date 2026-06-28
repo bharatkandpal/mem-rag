@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { EmbeddingModule } from './embedding/embedding.module';
 import { HealthModule } from './health/health.module';
+import { IngestionModule } from './ingestion/ingestion.module';
 import { VectorStoreModule } from './vector-store/vector-store.module';
 
 @Module({
@@ -11,6 +12,7 @@ import { VectorStoreModule } from './vector-store/vector-store.module';
     DatabaseModule,
     EmbeddingModule,
     VectorStoreModule,
+    IngestionModule,
     HealthModule,
   ],
 })

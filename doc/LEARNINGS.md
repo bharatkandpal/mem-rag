@@ -112,3 +112,25 @@
 **Why it matters:** This is the mechanism that makes the adapter seams real at runtime — the orchestrator never names a concrete provider, so swapping one is a factory change.
 **How I handled it:** Factory providers in `@Global` modules; tokens injected via `@Inject`.
 **Explain it in one line:** "Wiring is by token, not class, so the swap seams hold all the way down to the DI container."
+
+---
+
+## GO-21b · Ingestion pipeline
+
+### The orchestrator stays thin because the seams do the work
+**Concept:** `IngestionService.ingest()` is just `load → chunk → embed → upsert`. It injects the loader and the two adapter *interfaces*, reads chunk sizing from config, and contains no provider- or storage-specific code.
+**Why it matters:** All the hard parts (HTTP, SQL, tokenisation) live behind interfaces built earlier, so the pipeline reads like its own description — and swapping any piece doesn't touch it. This is the payoff for building the seams first.
+**How I handled it:** A ~40-line service over `DocumentLoader` + `EmbeddingProvider` + `VectorStore`; unit-tested by mocking all three.
+**Explain it in one line:** "The ingestion service is a thin orchestrator — the loader, embedder, and store are all interfaces, so it just sequences them."
+
+### Unit tests pass ≠ the app boots — DI wiring is a separate failure mode
+**Concept:** Mocked unit tests construct the service by hand, so they never exercise the Nest DI container. A missing provider or unresolvable token only fails at bootstrap.
+**Why it matters:** You can have 100% green tests and an app that won't start. Catching it needs an actual boot (or a Nest `TestingModule`).
+**How I handled it:** Built and booted the app with dummy creds and confirmed the DI graph resolved + routes mapped ("Nest application successfully started") before committing.
+**Explain it in one line:** "I boot the app as a smoke check because green unit tests don't prove the DI graph resolves."
+
+### Fail-fast config validation is a deliberate tradeoff
+**Concept:** The embedding factory constructs the provider at startup, and the provider's constructor throws on a missing `VOYAGE_API_KEY`. So the whole app refuses to boot without the key — `/healthz` included.
+**Why it matters:** Fail-fast surfaces a misconfiguration immediately instead of at the first `/ingest` call, but it couples *every* route's availability to the embedding key. For a demo where the key is required anyway, that's the right call; in a system where health must report during partial outages, you'd construct lazily instead.
+**How I handled it:** Kept fail-fast (key required to boot); `.env.example` documents it. Noted as a conscious choice, not an accident.
+**Explain it in one line:** "Missing keys fail at boot, not mid-request — a deliberate fail-fast tradeoff I'd revisit if health needed to survive a missing embedding key."
