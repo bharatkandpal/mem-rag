@@ -62,3 +62,11 @@
 **Decision:** Ship the focused RAG chatbot alone; multi-agent orchestration is a separate concern for a later iteration.
 **Why:** Scope discipline — a polished, finished single-purpose product beats a half-built one trying to do too much. A pluggable RAG chatbot is independently valuable.
 **Consequences:** Note it in the README's roadmap/future-work section so the direction is visible.
+
+## D9 — Chunking: recursive structure-aware, token-budgeted with overlap
+**Status:** Accepted
+**Context:** Chunking is the single biggest lever on retrieval quality (feeds D6). Cut too coarse and embeddings dilute; cut blindly and you sever ideas mid-sentence.
+**Decision:** A recursive splitter that descends a separator hierarchy (paragraph → line → sentence → word), cutting at the coarsest natural boundary that keeps pieces under a token budget, then greedily packs segments up to `CHUNK_TOKENS` (default **512**) with `OVERLAP_TOKENS` (default **64**, ~12%) carried between consecutive chunks. Token counts are measured with a real tokenizer (`gpt-tokenizer`, pure-JS) behind a small `countTokens()` wrapper. A single oversized segment is hard-split by tokens so no chunk ever exceeds the budget. Loader handles `.md`/`.txt` now; PDF is a later slice.
+**Alternatives:** Fixed token windows (simple, but cuts sentences in half — worse retrieval); character/word heuristics for token counting (zero-dep but drift from real tokens); whole-document embedding (useless beyond tiny docs).
+**Why:** Natural-boundary splitting keeps each chunk a coherent idea, which both embeds better and returns cleaner retrieval; overlap stops boundary-straddling facts from being lost; a real tokenizer makes "token-aware" honest and matches what models actually see. All three knobs (size, overlap, strategy) are env-configurable so they can be tuned against the eval harness (D6) rather than by vibes.
+**Consequences:** One small pure-JS dependency (`gpt-tokenizer`). The tokenizer is an approximation of Voyage's exact tokenization, but it only governs chunk *budgeting*, where consistency matters more than vendor-exact counts. Defaults are a starting baseline, not a tuned optimum — the eval run owns that.

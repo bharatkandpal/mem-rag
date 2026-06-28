@@ -24,8 +24,8 @@
 - [x] RAG-11 — Provider factory selected by `EMBEDDING_PROVIDER` env  · TDD §2.1
 - [~] RAG-12 — `VectorStore` interface (`upsert`, `search`)  · TDD §2.2 — `upsert` defined; `search` added at RAG-21 (eval-gated)
 - [x] RAG-13 — `PgVectorStore.upsert()` (idempotent on `UNIQUE(doc_id, chunk_index)`)  · TDD §2.2
-- [ ] RAG-14 — Document loader (md / txt / pdf)  · TDD §2.3
-- [ ] RAG-15 — Token-aware chunker with overlap  · TDD §2.3
+- [~] RAG-14 — Document loader (md / txt / pdf)  · TDD §2.3 — md/txt done + tested; PDF deferred to its own slice (D9)
+- [x] RAG-15 — Token-aware chunker with overlap  · TDD §2.3 — recursive structure-aware, eval-tunable (D9)
 - [ ] RAG-16 — Ingestion service: load → chunk → embed → upsert  · TDD §2.3
 - [ ] RAG-17 — `POST /ingest` ({ path } → stats)  · TDD §2.6
 - [ ] RAG-18 — Structured logs on ingest (docs, chunks, ms)  · TDD §3

@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/`.
 >
-> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11) + vector-store seam (RAG-12/13).
+> **Last updated:** GO-21b — embedding adapter (RAG-9/10/11), vector-store seam (RAG-12/13), loader + chunker (RAG-14/15).
 
 ---
 
@@ -21,6 +21,24 @@
 - **Defines:** `AppModule` (class)
 - **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `HealthModule`
 - **Used by:** `src/main.ts`
+
+### `src/ingestion/document-loader.ts`
+- **Purpose:** Load a corpus (file or dir) into `LoadedDocument[]` (RAG-14). Handles `.md`/`.txt`, skips others; PDF is a later slice.
+- **Defines:** `DocumentLoader` (class) · `DocumentLoader.load(rootPath): Promise<LoadedDocument[]>` · `LoadedDocument` (interface)
+- **Depends on:** `fs/promises`, `path`, `Logger`
+- **Used by:** — (ingestion service wires it at RAG-16)
+
+### `src/ingestion/chunker.ts`
+- **Purpose:** Recursive structure-aware, token-budgeted chunker with overlap (RAG-15, D9).
+- **Defines:** `chunk(text, opts): TextChunk[]` · `TextChunk` (interface) · `ChunkOptions` (interface) · `DEFAULT_CHUNK_OPTIONS` (const) · `segment`/`pack` (file-private)
+- **Depends on:** `countTokens`/`splitByTokens`/`tailByTokens` (`./tokenizer`)
+- **Used by:** — (ingestion service wires it at RAG-16)
+
+### `src/ingestion/tokenizer.ts`
+- **Purpose:** Token-counting/splitting wrapper (D9) — single swap point for the tokenizer.
+- **Defines:** `countTokens(text)` · `splitByTokens(text, max)` · `tailByTokens(text, n)`
+- **Depends on:** `gpt-tokenizer` (`encode`/`decode`)
+- **Used by:** `src/ingestion/chunker.ts`
 
 ### `src/vector-store/vector-store.interface.ts`
 - **Purpose:** The vector-store swap point (TDD §2.2) — ingestion/retrieval depend on this, never on pgvector directly.
@@ -96,6 +114,12 @@
 | `VECTOR_STORE` | DI token | `src/vector-store/vector-store.interface.ts` | `src/vector-store/vector-store.module.ts` |
 | `PgVectorStore` | class | `src/vector-store/pgvector.store.ts` | `src/vector-store/vector-store.module.ts` |
 | `VectorStoreModule` | class | `src/vector-store/vector-store.module.ts` | `src/app.module.ts` |
+| `DocumentLoader` | class | `src/ingestion/document-loader.ts` | ingestion service (RAG-16) |
+| `LoadedDocument` | interface | `src/ingestion/document-loader.ts` | ingestion service (RAG-16) |
+| `chunk` | function | `src/ingestion/chunker.ts` | ingestion service (RAG-16) |
+| `TextChunk` | interface | `src/ingestion/chunker.ts` | ingestion service (RAG-16) |
+| `ChunkOptions` / `DEFAULT_CHUNK_OPTIONS` | interface/const | `src/ingestion/chunker.ts` | chunker, ingestion config (RAG-16) |
+| `countTokens` / `splitByTokens` / `tailByTokens` | functions | `src/ingestion/tokenizer.ts` | `src/ingestion/chunker.ts` |
 | `HealthModule` | class | `src/health/health.module.ts` | `src/app.module.ts` |
 | `HealthController` | class | `src/health/health.controller.ts` | `src/health/health.module.ts` |
 | `HealthController.check` | method | `src/health/health.controller.ts` | route `GET /healthz` |
@@ -118,6 +142,8 @@
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
 | `RETRIEVAL_K` | _(reserved — GO-21c retrieval)_ | 5 |
 | `MIN_SCORE` | _(reserved — GO-21c floor)_ | 0.2 |
+| `CHUNK_TOKENS` | _(read by ingestion service at RAG-16; default in `DEFAULT_CHUNK_OPTIONS`)_ | 512 |
+| `OVERLAP_TOKENS` | _(read by ingestion service at RAG-16; default in `DEFAULT_CHUNK_OPTIONS`)_ | 64 |
 
 ## Non-code assets (referenced by build/runtime)
 
