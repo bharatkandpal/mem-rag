@@ -43,12 +43,14 @@
 
 ## Milestone GO-21d — Generation with citations  (PRD FR-4)
 
-- [ ] RAG-25 — Anthropic SDK client, model `claude-opus-4-8`  · TDD §2.5, D4
-- [ ] RAG-26 — Pass retrieved chunks as `document` blocks, `citations: {enabled: true}`  · TDD §2.5
-- [ ] RAG-27 — Generation service: retrieve → prompt → cited answer  · TDD §2.5
-- [ ] RAG-28 — **Abstain** when retrieval is empty/below floor (no free-generation)  · TDD §2.5, D5
-- [ ] RAG-29 — `POST /query` → `{ answer, citations[], chunks[] }`  · TDD §2.6
-- [ ] RAG-30 — Map citation spans back to source chunks  · TDD §2.5
+- [x] RAG-25 — Anthropic SDK client, model `claude-opus-4-8`  · TDD §2.5, D4
+- [x] RAG-26 — Pass retrieved chunks as `document` blocks, `citations: {enabled: true}`  · TDD §2.5
+- [x] RAG-27 — Generation service: retrieve → prompt → cited answer  · TDD §2.5
+- [x] RAG-28 — **Abstain** when retrieval is empty/below floor (no free-generation)  · TDD §2.5, D5
+- [x] RAG-29 — `POST /query` → `{ answer, citations[], chunks[] }`  · TDD §2.6
+- [x] RAG-30 — Map citation spans back to source chunks  · TDD §2.5
+
+> ⚠️ Generation is implemented + unit-tested (mocked Anthropic client) but **not yet run against the live API** — citation shapes verified against the `claude-api` reference; needs a smoke-test with a real `ANTHROPIC_API_KEY` (GO-21a smoke path).
 
 ## Milestone GO-21e — Minimal chat UI  (PRD FR-5)
 

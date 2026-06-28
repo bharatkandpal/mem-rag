@@ -147,6 +147,26 @@
 **How I handled it:** Floor filter can legitimately empty the result; tested that case explicitly.
 **Explain it in one line:** "Empty retrieval is a designed outcome — it's the trigger for abstaining instead of hallucinating."
 
+## GO-21d · Generation with citations
+
+### Native citations beat "please cite your sources"
+**Concept:** Instead of prompt-engineering the model to cite, pass each retrieved chunk as a `document` content block with `citations: {enabled: true}`. The API then returns citations as structured data — each cited span carries a `document_index` and the exact `cited_text`.
+**Why it matters:** Prompt-based "cite your sources" is brittle — the model invents citation formats, miscounts, or cites things it didn't use. Native citations are the model pointing at *actual spans* of the documents you gave it; you can verify and render them. This is the core trust feature of a RAG product.
+**How I handled it:** Each chunk → one document block (text source) with a title = its provenance; `document_index` maps the citation straight back to `chunks[i]`.
+**Explain it in one line:** "I use Claude's native citations API — chunks go in as document blocks and citations come back as verifiable spans with an index into my chunks, not as model-formatted text."
+
+### Abstain *before* the model call, not after
+**Concept:** When retrieval returns nothing above the floor, return "not in the corpus" immediately — without calling the model at all.
+**Why it matters:** A RAG system that free-generates on empty retrieval fabricates (D5). Short-circuiting before the API call makes abstention guaranteed (not dependent on the model behaving), and saves a token spend on a question we can't ground.
+**How I handled it:** `generate()` checks `chunks.length === 0` and returns the abstain result; tested that the model client is never called in that path.
+**Explain it in one line:** "Empty retrieval short-circuits to an abstain response before any model call — grounding is enforced in code, not hoped for from the prompt."
+
+### Don't guess the SDK shape — consult the reference
+**Concept:** The exact citation block shape (`source: {type: "text", media_type, data}`, `citations.enabled`, response `char_location` with `cited_text`/`document_index`) came from the `claude-api` capability, not memory.
+**Why it matters:** LLM SDK surfaces drift; a plausible-looking guess silently fails or 400s at runtime — and this code can't be runtime-tested without an API key. Grounding the shape in current docs is the difference between "compiles" and "works".
+**How I handled it:** Pulled the citations contract from the reference, pinned the model to `claude-opus-4-8`, and unit-tested the request/response shapes against it.
+**Explain it in one line:** "I ground LLM SDK calls in the current API reference rather than memory, because the surface drifts and a wrong shape fails silently at runtime."
+
 ### Env vars are strings — coerce numeric config
 **Concept:** `ConfigService.get('RETRIEVAL_K')` returns the string `"5"` when the env var is set, not a number; only the hard-coded default is a real number.
 **Why it matters:** String config sneaks through loose comparisons and surfaces as subtle bugs later (e.g. `"5" + 1` = `"51"`). Coerce at the boundary.

@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/`.
 >
-> **Last updated:** GO-21c — retrieval: VectorStore.search + RetrievalService (RAG-20-24). (GO-21b complete.)
+> **Last updated:** GO-21d — generation with citations: GenerationService + /query (RAG-25-30). (GO-21b/c complete.)
 
 ---
 
@@ -21,6 +21,23 @@
 - **Defines:** `AppModule` (class)
 - **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `HealthModule`
 - **Used by:** `src/main.ts`
+
+### `src/generation/generation.service.ts`
+- **Purpose:** Generation with native citations (RAG-25-30, D4) — retrieve → pass chunks as `document` blocks with citations → cited answer; abstain on empty retrieval (D5).
+- **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `QueryResult` / `Citation` (interfaces) · `ANTHROPIC_CLIENT` (DI token, const)
+- **Depends on:** `ANTHROPIC_CLIENT` (injected `Anthropic`), `RetrievalService`, `ConfigService` (`GENERATION_MODEL`)
+- **Used by:** `src/generation/generation.controller.ts`, `src/generation/generation.module.ts`
+
+### `src/generation/generation.controller.ts`
+- **Purpose:** `POST /query { question }` (RAG-29) — validates input, delegates to the service.
+- **Defines:** `GenerationController` (class) · `GenerationController.query(body): Promise<QueryResult>`
+- **Depends on:** `GenerationService`
+- **Used by:** `src/generation/generation.module.ts` (controller); route consumed by clients/UI
+
+### `src/generation/generation.module.ts`
+- **Purpose:** Generation feature module — imports `RetrievalModule`, binds `ANTHROPIC_CLIENT` from `ANTHROPIC_API_KEY`.
+- **Defines:** `GenerationModule` (class) · Anthropic client factory
+- **Used by:** `src/app.module.ts`
 
 ### `src/retrieval/retrieval.service.ts`
 - **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy (config); returns `[]` to enable abstain (D5).
@@ -142,7 +159,12 @@
 | `VECTOR_STORE` | DI token | `src/vector-store/vector-store.interface.ts` | `src/vector-store/vector-store.module.ts` |
 | `PgVectorStore` | class | `src/vector-store/pgvector.store.ts` | `src/vector-store/vector-store.module.ts` |
 | `VectorStoreModule` | class | `src/vector-store/vector-store.module.ts` | `src/app.module.ts` |
-| `RetrievalService` | class | `src/retrieval/retrieval.service.ts` | retrieval module; generation (RAG-27) |
+| `GenerationService` | class | `src/generation/generation.service.ts` | generation controller, module |
+| `QueryResult` / `Citation` | interface | `src/generation/generation.service.ts` | generation service + controller |
+| `ANTHROPIC_CLIENT` | DI token | `src/generation/generation.service.ts` | `src/generation/generation.module.ts` |
+| `GenerationController` | class | `src/generation/generation.controller.ts` | `src/generation/generation.module.ts` |
+| `GenerationModule` | class | `src/generation/generation.module.ts` | `src/app.module.ts` |
+| `RetrievalService` | class | `src/retrieval/retrieval.service.ts` | retrieval module; `src/generation/generation.service.ts` |
 | `RetrievalModule` | class | `src/retrieval/retrieval.module.ts` | `src/app.module.ts` |
 | `RetrievedChunk` | interface | `src/vector-store/vector-store.interface.ts` | pgvector `search`, retrieval service |
 | `IngestionService` | class | `src/ingestion/ingestion.service.ts` | ingestion controller, module |
@@ -166,6 +188,7 @@
 |--------|------|---------|------|
 | GET | `/healthz` | `HealthController.check` | `src/health/health.controller.ts` |
 | POST | `/ingest` | `IngestionController.ingest` | `src/ingestion/ingestion.controller.ts` |
+| POST | `/query` | `GenerationController.query` | `src/generation/generation.controller.ts` |
 
 ## Env vars → read in
 
@@ -173,7 +196,8 @@
 |-----|---------|---------|
 | `PORT` | `src/main.ts` | 3000 |
 | `DATABASE_URL` | `src/database/database.module.ts` | — |
-| `ANTHROPIC_API_KEY` | _(reserved — GO-21d generation)_ | — |
+| `ANTHROPIC_API_KEY` | `src/generation/generation.module.ts` (→ Anthropic client) | — |
+| `GENERATION_MODEL` | `src/generation/generation.service.ts` | claude-opus-4-8 |
 | `VOYAGE_API_KEY` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider`) | — |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
 | `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` | 5 |
