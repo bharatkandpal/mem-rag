@@ -173,6 +173,34 @@
 **How I handled it:** A `toNumber(value, fallback)` helper that parses and falls back on non-finite — careful to let `0` through as a valid floor.
 **Explain it in one line:** "I coerce numeric env config at the edge, because everything from the environment is a string."
 
+---
+
+## GO-21g · Retrieval eval harness
+
+### The eval runner uses the real service — no mock intermediary
+**Concept:** `NestFactory.createApplicationContext(AppModule)` spins up the full DI graph without an HTTP server, then resolves `RetrievalService` directly. The runner calls `retrieve()` in a loop and measures hit-rate + precision@k.
+**Why it matters:** Using the real `RetrievalService` means the eval numbers reflect actual production behaviour — including the `MIN_SCORE` floor, the real embedding call, and the HNSW search. A mock would measure test scaffolding, not retrieval quality.
+**How I handled it:** `app.get(RetrievalService)` inside a `createApplicationContext` bootstrap; `logger: false` suppresses Nest startup noise for clean output.
+**Explain it in one line:** "The eval runner bootstraps the real NestJS DI graph and calls the production service — so the numbers are what prod would return, not what a mock says."
+
+### Separate pure metric functions from the I/O-heavy runner
+**Concept:** `computeMetrics` and `formatTable` live in `eval/metrics.ts` and are pure functions with no I/O, no NestJS, and no network. The runner (`run-eval.ts`) does the I/O — reads the dataset, calls the service, calls the metrics functions.
+**Why it matters:** Pure functions are trivially unit-testable. Mixing the metric logic with the network calls would make testing require a live DB and Voyage key — slow, flaky, and not runnable in CI without secrets. The split means 7 unit tests cover all the metric edge cases (hit/miss, empty, multi-doc) with no real dependencies.
+**How I handled it:** `metrics.ts` + `metrics.spec.ts` with no imports beyond the shared `RetrievedChunk` type; runner imports and calls them.
+**Explain it in one line:** "Metric logic is in pure functions with unit tests; the runner is the thin shell that wires in real I/O."
+
+### A separate tsconfig for files outside src/
+**Concept:** The root `tsconfig.json` includes only `src/**/*`. The eval files live in `eval/`, outside that scope, so `ts-node` would fail to compile them without a second tsconfig. `tsconfig.eval.json` extends the root (inheriting `strict`, `emitDecoratorMetadata`, etc.) and adds `eval/**/*` to the includes.
+**Why it matters:** You can't just add `eval/` to the root tsconfig — it's compiled by `nest build` for production and you don't want eval tooling in the production bundle. A separate tsconfig keeps the scopes clean.
+**How I handled it:** `tsconfig.eval.json` extends `./tsconfig.json`, adds `eval/**/*`; `jest.config.js` adds `eval/` to `roots` so `metrics.spec.ts` runs with `npm test`.
+**Explain it in one line:** "A separate tsconfig scopes ts-node to eval/ without polluting the production build — the production tsconfig never sees the runner."
+
+### Exit code as a CI gate
+**Concept:** If hit-rate falls below `EVAL_MIN_HIT_RATE` (default 0.5), the runner calls `process.exit(1)`. This makes `npm run eval` usable as a CI quality gate — a CI step can fail the build on a retrieval regression.
+**Why it matters:** A printed number nobody reads is a vanity metric. A non-zero exit turns the number into a contract: retrieval quality is a requirement, not a suggestion.
+**How I handled it:** Hit-rate is computed after the loop; compared against the env-configurable floor; `process.exit(1)` with a clear error message if below threshold.
+**Explain it in one line:** "The eval exits non-zero on a regression so CI can gate on retrieval quality, not just print a number."
+
 ### Fail-fast config validation is a deliberate tradeoff
 **Concept:** The embedding factory constructs the provider at startup, and the provider's constructor throws on a missing `VOYAGE_API_KEY`. So the whole app refuses to boot without the key — `/healthz` included.
 **Why it matters:** Fail-fast surfaces a misconfiguration immediately instead of at the first `/ingest` call, but it couples *every* route's availability to the embedding key. For a demo where the key is required anyway, that's the right call; in a system where health must report during partial outages, you'd construct lazily instead.
