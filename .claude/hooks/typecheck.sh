@@ -2,6 +2,13 @@
 # PostToolUse hook: typecheck after edits, once the project actually exists.
 # Guarded so it's a silent no-op pre-scaffold (before package.json / deps exist).
 set -euo pipefail
+
+# Hooks run in a non-login shell; source nvm so node/npx are on PATH.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck source=/dev/null
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" --no-use
+[ -s "$NVM_DIR/alias/default" ] && nvm use default --silent 2>/dev/null || true
+
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 cd "$ROOT"
 

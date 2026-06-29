@@ -1,0 +1,10 @@
+{"question": "What embedding model does this project use by default?", "relevant_doc_ids": ["TDD.md"]}
+{"question": "What vector index type is used for similarity search?", "relevant_doc_ids": ["TDD.md"]}
+{"question": "How many dimensions do the embedding vectors stored in pgvector have?", "relevant_doc_ids": ["TDD.md"]}
+{"question": "What database table stores document chunks and their embeddings?", "relevant_doc_ids": ["TDD.md"]}
+{"question": "Which Claude model is used for answer generation?", "relevant_doc_ids": ["TDD.md", "PRD.md"]}
+{"question": "What happens when retrieval finds no chunks above the score floor?", "relevant_doc_ids": ["TDD.md"]}
+{"question": "What are the functional requirements of the system?", "relevant_doc_ids": ["PRD.md"]}
+{"question": "How do I run the project locally?", "relevant_doc_ids": ["README.md"]}
+{"question": "What are the build milestones and their order?", "relevant_doc_ids": ["GO-21.md"]}
+{"question": "What is the purpose of the swappable embedding adapter?", "relevant_doc_ids": ["TDD.md", "PRD.md"]}

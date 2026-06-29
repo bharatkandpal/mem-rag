@@ -22,27 +22,7 @@ curl -s localhost:3000/healthz
 
 `/healthz` returns **200 `ok`** only when the DB is reachable *and* the `vector` extension is present; otherwise **503 `degraded`**.
 
-## Retrieval quality
-
-```bash
-# Requires: docker compose up -d && POST /ingest on eval/sample-corpus
-DATABASE_URL=postgresql://rag:rag@localhost:5432/rag npm run eval
-```
-
-Baseline over the 10-question sample corpus (`eval/dataset.jsonl`, `eval/sample-corpus/`):
-
-| Metric | Score |
-|--------|-------|
-| Hit-rate | pending first run |
-| Avg precision@5 | pending first run |
-
-Run `npm run eval` after any retrieval change (chunk size, `k`, `MIN_SCORE`, embedding model) to confirm the number holds.
-
 ## Status
 
 - ✅ **GO-21a** — scaffold: NestJS, pgvector via Docker Compose, env config, `/healthz`.
-- ✅ **GO-21b** — ingestion pipeline: chunk → embed (Voyage) → pgvector upsert, `POST /ingest`.
-- ✅ **GO-21c** — retrieval: cosine top-k (HNSW) with score floor, `RetrievalService`.
-- ✅ **GO-21d** — generation: Claude `claude-opus-4-8` with native citations, `POST /query`.
-- ✅ **GO-21g** — retrieval eval harness: `npm run eval`, hit-rate + precision@k.
-- ⬜ GO-21e chat UI · GO-21f deploy (deferred).
+- ⬜ GO-21b ingest · GO-21c retrieve · GO-21d cited generation · GO-21e UI · GO-21f deploy · GO-21g eval harness.

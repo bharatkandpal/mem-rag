@@ -29,6 +29,8 @@ services:
       MIN_SCORE: ${MIN_SCORE:-0.2}
     ports:
       - "3000:3000"
+    volumes:
+      - ./eval/sample-corpus:/app/eval/sample-corpus:ro
     depends_on:
       db:
         condition: service_healthy

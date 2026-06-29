@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit",
+    "eval": "ts-node --project tsconfig.eval.json eval/run-eval.ts",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -29,6 +30,7 @@
     "@types/pg": "^8.11.10",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.0"
   }
 }

@@ -11,3 +11,4 @@ coverage/
 
 # os / editor
 .DS_Store
+.superpowers/
