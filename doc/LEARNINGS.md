@@ -206,3 +206,31 @@
 **Why it matters:** Fail-fast surfaces a misconfiguration immediately instead of at the first `/ingest` call, but it couples *every* route's availability to the embedding key. For a demo where the key is required anyway, that's the right call; in a system where health must report during partial outages, you'd construct lazily instead.
 **How I handled it:** Kept fail-fast (key required to boot); `.env.example` documents it. Noted as a conscious choice, not an accident.
 **Explain it in one line:** "Missing keys fail at boot, not mid-request — a deliberate fail-fast tradeoff I'd revisit if health needed to survive a missing embedding key."
+
+---
+
+## Model swap + first live baseline (voyage-4-lite)
+
+### A 429 is a rate window, not necessarily an empty tank
+**Concept:** 429 Too Many Requests usually means a per-minute rate limit, not exhausted quota. The tell was in the structured logs: three back-to-back embed batches succeeded (one per second), then the fourth 429'd — a window, not a balance.
+**Why it matters:** The wrong diagnosis buys the wrong fix. "Out of tokens" suggests switching models or buying credits; "rate-limited" demands backoff. Timestamped structured logs are what make the two distinguishable.
+**How I handled it:** Read the success/failure pattern from the ingest logs before changing anything; the fix became retry-with-backoff, and the model switch happened for its own reasons (gen-4 recommended, quota headroom).
+**Explain it in one line:** "Three successes then a 429 means a rate window, not an empty tank — I diagnosed it from log timestamps before picking the fix."
+
+### Provider resilience belongs inside the adapter
+**Concept:** Rate limits are a vendor quirk, so the retry logic (429/5xx → exponential backoff, honoring `Retry-After`, ~62s total across 5 retries = one full rate window) lives entirely inside `VoyageEmbeddingProvider`. Call sites are unchanged.
+**Why it matters:** If ingestion or retrieval knew about retries, swapping providers would mean re-implementing resilience per caller. Behind the seam, a rate-limited ingest went from crashing at doc 4 to completing in 67s — with zero changes outside the adapter.
+**How I handled it:** A private `postWithRetry` + a stubbable `sleep` (tests mock it — no fake timers); non-retryable statuses still fail fast, and error messages still never echo the key.
+**Explain it in one line:** "The Voyage adapter rides out 429s with backoff internally, so the ingestion pipeline never learns what a rate limit is."
+
+### Pin the embedding contract in the request, not in hope
+**Concept:** The schema's `VECTOR(1024)` is a hard contract, so the adapter sends `output_dimension: 1024` explicitly (and the model is env-configurable via `VOYAGE_MODEL` instead of hardcoded). A same-dims model swap still means a full re-ingest — different models embed into different spaces — which the idempotent upsert handles by overwriting rows in place.
+**Why it matters:** Model defaults drift; an implicit dims change would corrupt the store silently or fail at insert. And mixing vectors from two models is a correctness bug no error will ever surface — retrieval just quietly degrades.
+**How I handled it:** `dims` drives the request param; D3 records the swap decision; re-ingest verified live (double ingest, row count stable at 9).
+**Explain it in one line:** "The request pins output_dimension to the schema's 1024 and a model swap always re-ingests — vector spaces don't mix, and dims must never drift silently."
+
+### A similarity floor is only as good as the eval that set it
+**Concept:** Live probe: "What is the capital of France?" — clearly out-of-corpus — still had 1 of 5 hits clear the `MIN_SCORE=0.2` floor, so the code-level abstain (D5) never fired and the request went to the model. The floor was a guess, and the guess was wrong.
+**Why it matters:** The abstain guarantee is the product's core trust feature, but it's enforced by a threshold — and an uncalibrated threshold fails invisibly: the system looks grounded right up until it confidently answers over junk context.
+**How I handled it:** Tracked as RAG-57: calibrate the floor with before/after eval runs and seed `eval/answers.jsonl` with should-abstain cases, per rule `evals.md` — no vibes-tuning.
+**Explain it in one line:** "An out-of-corpus question cleared our similarity floor — abstention is only as strong as the eval that calibrates the threshold behind it."

@@ -27,6 +27,7 @@
 **Alternatives:** OpenAI `text-embedding-3`, open-source local model.
 **Why:** Voyage is the Anthropic-ecosystem recommendation; the adapter lets an integrator swap to OpenAI/local without touching call sites — provider choice stays theirs.
 **Consequences:** One more API key (env-managed). Adapter dims must match the schema column (see D1).
+**Update (2026-07-03):** default moved to **`voyage-4-lite`** — voyage-3 quota exhausted on our account (429s), and Voyage recommends the gen-4 family. Same 1024-dim contract, now pinned explicitly with `output_dimension` in the request; model is env-configurable via `VOYAGE_MODEL` (no more hardcoded ID). Different embedding space → full re-ingest required; the idempotent upsert overwrites vectors in place. First live eval (still pending at switch time) becomes the baseline — there is no voyage-3 "before" number, its quota died before the harness ever ran.
 
 ## D4 — Generation: Claude `claude-opus-4-8` with native citations
 **Status:** Accepted

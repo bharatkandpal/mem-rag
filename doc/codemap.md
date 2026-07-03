@@ -2,9 +2,9 @@
 
 > Index of files → exported symbols → where each is used. Its purpose: when a function or symbol needs to change, look it up here to see **every place affected** before editing.
 >
-> **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/`.
+> **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** GO-21d — generation with citations: GenerationService + /query (RAG-25-30). (GO-21b/c complete.)
+> **Last updated:** embedding default → `voyage-4-lite` via `VOYAGE_MODEL` (D3 update) · eval harness entries (RAG-38-40). (GO-21a–d complete.)
 
 ---
 
@@ -109,7 +109,7 @@
 - **Used by:** `src/embedding/voyage-embedding.provider.ts` (implements) · `src/embedding/embedding.module.ts` (binds token)
 
 ### `src/embedding/voyage-embedding.provider.ts`
-- **Purpose:** Default `EmbeddingProvider` impl — Voyage `voyage-3`, 1024 dims, via REST (no SDK). All Voyage-specific code contained here.
+- **Purpose:** Default `EmbeddingProvider` impl — Voyage (default `voyage-4-lite`, env `VOYAGE_MODEL`), 1024 dims pinned via `output_dimension`, via REST (no SDK). All Voyage-specific code contained here.
 - **Defines:** `VoyageEmbeddingProvider` (class) · `VoyageEmbeddingProvider.embed(): Promise<number[][]>`
 - **Depends on:** `EmbeddingProvider` (interface), `Logger`, global `fetch`; `VOYAGE_API_KEY` (ctor arg)
 - **Used by:** `src/embedding/embedding.module.ts` (factory)
@@ -140,6 +140,18 @@
 - **Depends on:** `PG_POOL` (injected `Pool`)
 - **Used by:** `src/health/health.module.ts` (controller); route consumed by clients / docker healthcheck path
 
+### `eval/metrics.ts`
+- **Purpose:** Pure eval metric functions (RAG-39) — no I/O, NestJS, or network, so they're trivially unit-testable (`metrics.spec.ts`).
+- **Defines:** `computeMetrics(chunks, relevantDocIds): { hit, precision }` · `formatTable(results, k): string` · `EvalEntry` (interface) · `EvalResult` (interface)
+- **Depends on:** `RetrievedChunk` (`src/vector-store/vector-store.interface`)
+- **Used by:** `eval/run-eval.ts`, `eval/metrics.spec.ts`
+
+### `eval/run-eval.ts`
+- **Purpose:** Eval runner (RAG-40) — bootstraps the real DI graph (`createApplicationContext`, no HTTP server), runs `RetrievalService.retrieve()` over `eval/dataset.jsonl`, prints the per-question table + summary, exits 1 when hit-rate < `EVAL_MIN_HIT_RATE`.
+- **Defines:** `main(): Promise<void>` (file-private entrypoint)
+- **Depends on:** `AppModule`, `RetrievalService`, `computeMetrics`/`formatTable`/`EvalEntry`/`EvalResult` (`./metrics`), `fs`/`path`
+- **Used by:** — (entrypoint; `npm run eval` via ts-node + `tsconfig.eval.json`)
+
 ---
 
 ## Symbol → usage index
@@ -166,7 +178,7 @@
 | `GenerationModule` | class | `src/generation/generation.module.ts` | `src/app.module.ts` |
 | `RetrievalService` | class | `src/retrieval/retrieval.service.ts` | retrieval module; `src/generation/generation.service.ts` |
 | `RetrievalModule` | class | `src/retrieval/retrieval.module.ts` | `src/app.module.ts` |
-| `RetrievedChunk` | interface | `src/vector-store/vector-store.interface.ts` | pgvector `search`, retrieval service |
+| `RetrievedChunk` | interface | `src/vector-store/vector-store.interface.ts` | pgvector `search`, retrieval service, `eval/metrics.ts` |
 | `IngestionService` | class | `src/ingestion/ingestion.service.ts` | ingestion controller, module |
 | `IngestStats` | interface | `src/ingestion/ingestion.service.ts` | ingestion service + controller (return type) |
 | `IngestionController` | class | `src/ingestion/ingestion.controller.ts` | `src/ingestion/ingestion.module.ts` |
@@ -181,6 +193,9 @@
 | `HealthController` | class | `src/health/health.controller.ts` | `src/health/health.module.ts` |
 | `HealthController.check` | method | `src/health/health.controller.ts` | route `GET /healthz` |
 | `HealthReport` | interface | `src/health/health.controller.ts` | `src/health/health.controller.ts` (return type) |
+| `computeMetrics` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
+| `formatTable` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
+| `EvalEntry` / `EvalResult` | interface | `eval/metrics.ts` | `eval/run-eval.ts` |
 
 ## HTTP routes
 
@@ -199,11 +214,13 @@
 | `ANTHROPIC_API_KEY` | `src/generation/generation.module.ts` (→ Anthropic client) | — |
 | `GENERATION_MODEL` | `src/generation/generation.service.ts` | claude-opus-4-8 |
 | `VOYAGE_API_KEY` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider`) | — |
+| `VOYAGE_MODEL` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider` ctor) | voyage-4-lite |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
-| `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` | 5 |
+| `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` · `eval/run-eval.ts` (table label) | 5 |
 | `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.2 |
 | `CHUNK_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 512 |
 | `OVERLAP_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 64 |
+| `EVAL_MIN_HIT_RATE` | `eval/run-eval.ts` (CI gate: exit 1 below floor) | 0.5 |
 
 ## Non-code assets (referenced by build/runtime)
 
@@ -212,3 +229,7 @@
 | `db/init/001_init.sql` | `docker-compose.yml` (db initdb mount) | `vector` extension + `chunks` table + HNSW index |
 | `docker-compose.yml` | `docker compose up` | app + pgvector services |
 | `Dockerfile` | `docker-compose.yml` (app build) | build/run the Nest app |
+| `eval/dataset.jsonl` | `eval/run-eval.ts` | labeled eval set (`question` → `relevant_doc_ids[]`) |
+| `eval/sample-corpus/` | `POST /ingest` before an eval run | **frozen** fixture corpus the dataset labels are tied to (rule `evals.md`) |
+| `tsconfig.eval.json` | `npm run eval` (ts-node `--project`) · typecheck hook | extends root tsconfig, adds `eval/**` (kept out of `nest build`) |
+| `jest.config.js` | `npm test` | ts-jest; roots `src/` + `eval/` |

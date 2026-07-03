@@ -29,12 +29,14 @@ curl -s localhost:3000/healthz
 DATABASE_URL=postgresql://rag:rag@localhost:5432/rag npm run eval
 ```
 
-Baseline over the 10-question sample corpus (`eval/dataset.jsonl`, `eval/sample-corpus/`):
+Baseline over the 10-question sample corpus (`eval/dataset.jsonl`, `eval/sample-corpus/`), embeddings `voyage-4-lite`:
 
 | Metric | Score |
 |--------|-------|
-| Hit-rate | pending first run |
-| Avg precision@5 | pending first run |
+| Hit-rate | **100%** (10/10) |
+| Avg precision@5 | **0.42** |
+
+(With 9 chunks total and k=5, ~0.4–0.6 is the structural precision ceiling — hit-rate is the headline metric at this corpus size.)
 
 Run `npm run eval` after any retrieval change (chunk size, `k`, `MIN_SCORE`, embedding model) to confirm the number holds.
 
@@ -44,5 +46,6 @@ Run `npm run eval` after any retrieval change (chunk size, `k`, `MIN_SCORE`, emb
 - ✅ **GO-21b** — ingestion pipeline: chunk → embed (Voyage) → pgvector upsert, `POST /ingest`.
 - ✅ **GO-21c** — retrieval: cosine top-k (HNSW) with score floor, `RetrievalService`.
 - ✅ **GO-21d** — generation: Claude `claude-opus-4-8` with native citations, `POST /query`.
-- ✅ **GO-21g** — retrieval eval harness: `npm run eval`, hit-rate + precision@k.
+- ✅ **GO-21g** — retrieval eval harness: `npm run eval`, hit-rate + precision@k — live baseline in the table above.
+- ⬜ **GO-21h** — CLI wrapper (`rag ingest` / `rag query`) — next up.
 - ⬜ GO-21e chat UI · GO-21f deploy (deferred).

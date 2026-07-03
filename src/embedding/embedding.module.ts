@@ -24,6 +24,7 @@ import { VoyageEmbeddingProvider } from './voyage-embedding.provider';
           case 'voyage':
             return new VoyageEmbeddingProvider(
               config.get<string>('VOYAGE_API_KEY', ''),
+              config.get<string>('VOYAGE_MODEL'),
             );
           // Alt providers (e.g. openai) plug in here to prove the seam — RAG-10+.
           default:

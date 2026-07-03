@@ -30,7 +30,7 @@ interface EmbeddingProvider {
   embed(texts: string[]): Promise<number[][]>;
 }
 ```
-- Default impl: `VoyageEmbeddingProvider` (`voyage-3`).
+- Default impl: `VoyageEmbeddingProvider` (default `voyage-4-lite`, override via `VOYAGE_MODEL`; dims pinned to 1024 via `output_dimension`).
 - Alt impl (to prove the seam): `OpenAIEmbeddingProvider` or a local model. Selected via `EMBEDDING_PROVIDER` env.
 
 ### 2.2 Vector store (FR-1, FR-3)
@@ -79,7 +79,7 @@ Single static page (or minimal React) hitting `/query`; renders answer + clickab
 
 ## 3. Cross-cutting (NFRs)
 
-- **Config:** `@nestjs/config`; `.env.example` committed, `.env` git-ignored. Keys: `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`, `DATABASE_URL`, `EMBEDDING_PROVIDER`, `RETRIEVAL_K`, `MIN_SCORE`.
+- **Config:** `@nestjs/config`; `.env.example` committed, `.env` git-ignored. Keys: `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`, `VOYAGE_MODEL`, `DATABASE_URL`, `EMBEDDING_PROVIDER`, `RETRIEVAL_K`, `MIN_SCORE`.
 - **Logging:** structured (pino/Nest logger) on ingest + query; latency + counts.
 - **Secrets:** env only — never committed, never in prompts/logs.
 - **Tests:** Jest. Unit-test chunking + adapters; integration-test `/query` happy path.

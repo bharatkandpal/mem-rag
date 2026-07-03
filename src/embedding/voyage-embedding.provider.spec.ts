@@ -51,7 +51,7 @@ describe('VoyageEmbeddingProvider', () => {
     expect(out).toEqual([[0.1], [0.2]]);
   });
 
-  it('sends the model, batched input, and bearer auth', async () => {
+  it('sends the model, batched input, pinned dims, and bearer auth', async () => {
     fetchMock.mockResolvedValue(okResponse([{ index: 0, embedding: [0.1] }]));
     const provider = new VoyageEmbeddingProvider(KEY);
     await provider.embed(['hello']);
@@ -59,7 +59,18 @@ describe('VoyageEmbeddingProvider', () => {
     const [, init] = fetchMock.mock.calls[0];
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBe(`Bearer ${KEY}`);
-    expect(JSON.parse(init.body)).toEqual({ input: ['hello'], model: 'voyage-3' });
+    expect(JSON.parse(init.body)).toEqual({
+      input: ['hello'],
+      model: 'voyage-4-lite',
+      output_dimension: 1024,
+    });
+  });
+
+  it('uses a custom model when provided (env-driven via the factory)', async () => {
+    fetchMock.mockResolvedValue(okResponse([{ index: 0, embedding: [0.1] }]));
+    const provider = new VoyageEmbeddingProvider(KEY, 'voyage-4');
+    await provider.embed(['hello']);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('voyage-4');
   });
 
   it('throws on a non-ok response without leaking the key', async () => {
@@ -67,5 +78,60 @@ describe('VoyageEmbeddingProvider', () => {
     const provider = new VoyageEmbeddingProvider(KEY);
     await expect(provider.embed(['x'])).rejects.toThrow(/401/);
     await expect(provider.embed(['x'])).rejects.not.toThrow(new RegExp(KEY));
+  });
+
+  // Voyage rate-limits per minute; the adapter must ride out 429s, not crash ingest.
+  describe('retry on 429', () => {
+    const rateLimited = (retryAfter?: string) => ({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { get: (h: string) => (h === 'retry-after' ? retryAfter ?? null : null) },
+    });
+
+    const stubSleep = (provider: VoyageEmbeddingProvider) =>
+      jest
+        .spyOn(provider as unknown as { sleep: (ms: number) => Promise<void> }, 'sleep')
+        .mockResolvedValue(undefined);
+
+    it('retries a 429 and succeeds on the next attempt', async () => {
+      fetchMock
+        .mockResolvedValueOnce(rateLimited())
+        .mockResolvedValueOnce(okResponse([{ index: 0, embedding: [0.1] }]));
+      const provider = new VoyageEmbeddingProvider(KEY);
+      const sleep = stubSleep(provider);
+
+      const out = await provider.embed(['x']);
+      expect(out).toEqual([[0.1]]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('honors Retry-After (seconds) for the wait', async () => {
+      fetchMock
+        .mockResolvedValueOnce(rateLimited('7'))
+        .mockResolvedValueOnce(okResponse([{ index: 0, embedding: [0.1] }]));
+      const provider = new VoyageEmbeddingProvider(KEY);
+      const sleep = stubSleep(provider);
+
+      await provider.embed(['x']);
+      expect(sleep).toHaveBeenCalledWith(7000);
+    });
+
+    it('gives up after exhausting retries', async () => {
+      fetchMock.mockResolvedValue(rateLimited());
+      const provider = new VoyageEmbeddingProvider(KEY);
+      stubSleep(provider);
+
+      await expect(provider.embed(['x'])).rejects.toThrow(/429/);
+      expect(fetchMock).toHaveBeenCalledTimes(6); // 1 attempt + 5 retries
+    });
+
+    it('does not retry a non-retryable status', async () => {
+      fetchMock.mockResolvedValue({ ok: false, status: 400, statusText: 'Bad Request' });
+      const provider = new VoyageEmbeddingProvider(KEY);
+      await expect(provider.embed(['x'])).rejects.toThrow(/400/);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
