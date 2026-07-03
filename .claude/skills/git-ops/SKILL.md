@@ -19,10 +19,7 @@ Make git operations predictable and safe. Follow these rules exactly — they ex
 1. `git status` + `git diff --staged` (or stage first, then review) — know exactly what's going in.
 2. Stage intentionally (`git add <paths>`); avoid blind `git add -A` if unrelated changes are floating. For the initial scaffold commit, `-A` is fine.
 3. Group related changes into one logical commit. Don't bundle unrelated work.
-4. **Message format** — Conventional Commits subject, imperative mood, ≤72 chars; body explains *why* when non-obvious. End every commit message with the trailer:
-   ```
-   Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-   ```
+4. **Message format** — Conventional Commits subject, imperative mood, ≤72 chars; body explains *why* when non-obvious. **No `Co-Authored-By` / attribution trailer** — this repo's commits carry no AI attribution (enforced via `attribution.commit: ""` in `.claude/settings.json`, so it holds regardless of harness defaults).
    Examples: `feat(retrieval): add min-score floor`, `chore: scaffold rag project`, `fix(ingest): dedupe on re-run`.
 5. Verify: `git log --oneline -1` to confirm it landed.
 
@@ -35,6 +32,7 @@ Make git operations predictable and safe. Follow these rules exactly — they ex
 
 - `.env` and secrets must never be staged (the `.gitignore` covers them — but double-check `git status` before a commit that touches config; see rule `ai-and-secrets.md`).
 - Keep commit history clean — contributors and integrators read it; it's part of the product's quality bar (PRD §5).
+- A PreToolUse hook guards `git commit`: staged TS changes under `src/`/`eval/` need `doc/codemap.md` staged too, and retrieval-affecting changes need eval evidence in the message. It says exactly what's missing; `[codemap-ok]` / `[eval-ok]` in the message acknowledge genuine no-ops (rules `coding-standards.md` / `evals.md`).
 
 ## On agents
 

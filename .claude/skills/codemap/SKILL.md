@@ -9,13 +9,13 @@ Maintain `doc/codemap.md` so it always answers one question: **"if I change this
 
 ## When to run
 
-- After adding/editing/deleting any `src/**` symbol (function, class, module, interface, const, route).
+- After adding/editing/deleting any `src/**` or `eval/**` symbol (function, class, module, interface, const, route) — and any future `cli/**` code. Anything TypeScript outside `node_modules` is in scope.
 - After a rename or signature change (these ripple through "Used in").
 - On request ("update the codemap").
 
 ## What the codemap must contain
 
-1. **Files** — one entry per `src` file: purpose, the symbols it defines/exports, what it depends on, and what uses it.
+1. **Files** — one entry per `src`/`eval` code file: purpose, the symbols it defines/exports, what it depends on, and what uses it.
 2. **Symbol → usage index** — the table that matters most: every exported symbol, where it's defined, and **every file that uses it**.
 3. **HTTP routes** — method · path · handler · file.
 4. **Env vars → read in** — which file reads each (mark reserved ones not yet wired).
@@ -25,12 +25,12 @@ Maintain `doc/codemap.md` so it always answers one question: **"if I change this
 ## How to update (prefer incremental)
 
 1. Identify what changed (the files you just edited, or `git diff --name-only`).
-2. For each changed symbol, find its real usages: `grep -rn "<symbolName>" src/` (don't trust memory — verify call sites).
+2. For each changed symbol, find its real usages: `grep -rn "<symbolName>" src/ eval/` (don't trust memory — verify call sites).
 3. Update that file's entry **and** every row of the Symbol→usage index the change touches (a rename updates both the "Defined in" and all "Used in"; a deletion removes the row and its references).
 4. Update routes / env / assets tables if those changed.
 5. Bump the **Last updated** line.
 
-Full rebuilds (scan all of `src/`) are fine for big refactors; incremental is the default to stay fast.
+Full rebuilds (scan `src/` + `eval/`) are fine for big refactors; incremental is the default to stay fast.
 
 ## Dispatching
 
@@ -39,5 +39,5 @@ For anything beyond a trivial one-symbol edit, dispatch the **`codemap-updater`*
 ## Guardrails
 
 - **Verify usages by grep, never by recall** — the whole point is accuracy.
-- Don't let the index drift: if `git diff` touched `src/` but `doc/codemap.md` didn't, the change isn't done.
+- Don't let the index drift: if `git diff` touched `src/` or `eval/` but `doc/codemap.md` didn't, the change isn't done (the pre-commit guard enforces this).
 - Keep entries terse — purpose in one line, symbols as a list. This is a lookup table, not prose.

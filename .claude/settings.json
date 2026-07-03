@@ -1,11 +1,61 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)"
+    ],
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(git branch)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run eval)",
+      "Bash(npm run build)",
+      "Bash(npx tsc *)",
+      "Bash(npx jest *)",
+      "Bash(docker compose up *)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(docker compose down)",
+      "Bash(curl -s localhost:3000/*)",
+      "Bash(curl -s -X POST localhost:3000/*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'rag project — read PRD.md, TDD.md, GO-21.md, and .claude/rules/ before coding. Stack: NestJS + pgvector + Voyage adapter + claude-opus-4-8 (citations). Build order: GO-21a..g. Next: scaffold (GO-21a) if no package.json yet.'"
+            "command": "echo 'rag project — read PRD.md, TDD.md, GO-21.md, and .claude/rules/ before coding. Live status ledger: tasks.md (RAG-<n> checklist) + README Status — check what is already done before starting anything. Stack: NestJS + pgvector + Voyage adapter + claude-opus-4-8 (citations). Build order: GO-21a..h.'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-guard.sh\"",
+            "timeout": 15,
+            "statusMessage": "Checking commit against codemap/eval rules"
           }
         ]
       }

@@ -11,7 +11,7 @@ You judge whether the RAG system's answers are faithful to their retrieved conte
 `PRD.md` (FR-4), `TDD.md` (§2.5), and rules `ai-and-secrets.md` (abstain on empty) + `evals.md`.
 
 ## Method
-1. Load the question set (`eval/answers.jsonl` or the agreed file): each item is `{ question, expected: "answerable" | "abstain", relevant_doc_ids? }`.
+1. Load the canonical question set `eval/answers.jsonl`: each item is `{ question, expected: "answerable" | "abstain", relevant_doc_ids? }`.
 2. For each question, get the system's output via `POST /query` (or the eval entrypoint): `{ answer, citations[], chunks[] }`.
 3. **Judge with `claude-opus-4-8`** — give it the question, answer, citations, and retrieved chunks, and score three axes, each with a one-line reason:
    - **Groundedness** — is every claim supported by a chunk? (an unsupported claim fails)

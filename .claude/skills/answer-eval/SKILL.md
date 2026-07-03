@@ -16,7 +16,7 @@ For each question, the judge scores:
 
 ## Method
 
-1. Maintain a question set with expected behaviour (answerable vs. should-abstain) — extend `eval/dataset.jsonl` or a sibling `eval/answers.jsonl`.
+1. Maintain the canonical answer-eval set **`eval/answers.jsonl`** (a sibling of `dataset.jsonl`), each item `{ question, expected: "answerable" | "abstain", relevant_doc_ids? }`.
 2. For each question: call `POST /query`, capture `answer` + `citations` + `chunks`.
 3. **Judge with `claude-opus-4-8`** (LLM-as-judge): give it the question, the answer, the citations, and the retrieved chunks; have it score the three axes with a one-line justification each. Consult the `claude-api` capability for current SDK shapes — don't guess.
 4. Aggregate: % grounded, % citations correct, % abstained-correctly. Surface failures with the judge's reason.
