@@ -49,6 +49,11 @@
 - [x] RAG-28 — **Abstain** when retrieval is empty/below floor (no free-generation)  · TDD §2.5, D5
 - [x] RAG-29 — `POST /query` → `{ answer, citations[], chunks[] }`  · TDD §2.6
 - [x] RAG-30 — Map citation spans back to source chunks  · TDD §2.5
+- [x] RAG-58 — `GenerationProvider` interface (`supportsCitations`, `generate()`); `GenerationService` reduced to a thin orchestrator (retrieve → abstain policy → delegate)  · TDD §2.5, D4 update
+- [x] RAG-59 — `AnthropicGenerationProvider` — default impl, native citations, extracted from the old inline service logic  · TDD §2.5
+- [x] RAG-60 — `OpenAICompatibleGenerationProvider` — proves the seam; any OpenAI-compatible endpoint (OpenAI, Ollama, LM Studio, vLLM); `supportsCitations=false`, never fakes citations  · TDD §2.5, `add-adapter` skill
+- [x] RAG-61 — `GENERATION_PROVIDER` env-selected factory in `GenerationModule` (default `anthropic`)  · TDD §2.5
+- [x] RAG-62 — `QueryResult.citationsSupported` — honest per-provider capability flag surfaced through `POST /query`  · D4 update, rule `ai-and-secrets.md`
 
 > ⚠️ Generation is implemented + unit-tested (mocked Anthropic client) but the live `/query` smoke is **blocked on Anthropic API credits** (billing — the account returned "credit balance too low"). Retrieval feeding it is eval-validated; re-run the smoke (cited answer + abstain) once credits are topped up.
 
@@ -100,3 +105,4 @@
 ---
 
 *Decompose any RAG-<n> further as `RAG-<n>a` when needed. Retrieval-affecting changes (RAG-15/20-24/26/56/57) must be backed by an eval run — see rule `evals.md`.*
+*Generation-provider changes (RAG-58-62) touch the answer path, not retrieval — no eval run required, but an `answer-eval` pass is expected before shipping a new `GenerationProvider` (`add-adapter` skill).*

@@ -11,7 +11,7 @@ Retrieval evals (`run-evals`) prove the right chunks come back. This proves the 
 
 For each question, the judge scores:
 - **Groundedness** — every claim in the answer is supported by a retrieved chunk (penalise anything not in the context — that's hallucination).
-- **Citation accuracy** — cited sources actually contain the cited claim.
+- **Citation accuracy** — cited sources actually contain the cited claim. **Only scored when the response's `citationsSupported` is `true`** (D4 update) — a `GENERATION_PROVIDER=openai-compatible` run correctly returns `citations: []`, so this axis is N/A rather than a failure; judge groundedness and abstention only.
 - **Abstention correctness** — out-of-corpus questions get the abstain, not a fabricated answer (D5).
 
 ## Method

@@ -31,7 +31,7 @@ A pluggable retrieval-augmented chatbot that returns **citation-grounded answers
 | FR-1 | Ingest a folder of documents (md/txt/pdf) | Pointing the ingester at a folder lands chunked, embedded rows; re-runs are idempotent |
 | FR-2 | Chunk + embed documents via a **swappable embedding adapter** | Default Voyage adapter works; a second adapter can be dropped in without touching call sites |
 | FR-3 | Retrieve top-k relevant chunks for a query | Query returns ranked chunks with source + similarity score |
-| FR-4 | Generate a grounded answer with **citations** | Answer cites the specific source chunks it used; no answer without retrieved context |
+| FR-4 | Generate a grounded answer with **citations**, via a swappable generation provider | Default (Claude) provider cites the specific source chunks it used; every provider is constrained to retrieved context only — no answer without it, and no provider fabricates citations it can't verify |
 | FR-5 | Minimal chat UI | A non-technical user asks questions in a browser and sees cited answers |
 | FR-6 | **Retrieval eval harness** | `npm run eval` prints retrieval-quality metrics (hit-rate / precision@k) over a labeled set |
 | FR-7 | One-command run | `git clone` → `docker compose up` → app + DB live locally |

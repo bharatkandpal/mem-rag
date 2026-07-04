@@ -3,7 +3,7 @@
 Binding conventions for this repo. Derived from TDD §2–3.
 
 - **TypeScript + NestJS.** Modules per concern: `ingestion`, `retrieval`, `generation`, `eval`. No business logic in controllers.
-- **Adapters are the swap points.** Anything touching an embedding model or vector store goes through the `EmbeddingProvider` / `VectorStore` interfaces (TDD §2.1–2.2). Never call Voyage or pgvector directly from ingestion/retrieval code — go through the interface so the seam stays real (no vendor lock-in).
+- **Adapters are the swap points.** Anything touching an embedding model, vector store, or generation model goes through the `EmbeddingProvider` / `VectorStore` / `GenerationProvider` interfaces (TDD §2.1–2.2, §2.5). Never call Voyage, pgvector, or an LLM SDK/API directly from ingestion/retrieval/generation code — go through the interface so the seam stays real (no vendor lock-in).
 - **No LangChain / LlamaIndex.** Thin, readable, owned code. If you're reaching for a framework, stop — that defeats the "I built the infrastructure" signal.
 - **Tests with Jest.** Unit-test chunking + adapters; integration-test the `/query` happy path. A retrieval-affecting change without a test or eval is incomplete.
 - **Structured logging** on ingest + query paths (latency + counts) — never `console.log`.

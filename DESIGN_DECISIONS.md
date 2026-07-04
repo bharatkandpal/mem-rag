@@ -36,6 +36,7 @@
 **Alternatives:** Prompt-engineered "cite your sources" without the citations API (brittle); a cheaper model (weaker grounding).
 **Why:** Native citations deliver grounded answers with source spans mapped back to chunks — far more robust than asking the model to self-cite, and the core trust feature for plugging the bot into a real workflow.
 **Consequences:** Tied to the Anthropic citations contract; consult the `claude-api` capability for current SDK shapes rather than guessing.
+**Update (2026-07-03):** generation moved behind a `GenerationProvider` adapter (mirroring D1/D3's vector-store/embedding seam) so any provider — including a small local model via Ollama/LM Studio/vLLM — can be plugged in. Claude remains the **default** and the only implementation with native citations; the interface exposes `supportsCitations` as an honest capability flag rather than emulating citations on providers that can't verify them. Prompt-engineered citations were explicitly rejected above for Claude ("brittle") — asking a *smaller* model to fake the same structured output would be strictly worse, so a non-citation provider always returns `citations: []`, never an imitation. Non-citation providers still inherit the abstain-on-empty-retrieval guarantee (D5) and the same grounding-only system prompt; what they lose is verifiable source spans, not grounding.
 
 ## D5 — Abstain on empty retrieval
 **Status:** Accepted

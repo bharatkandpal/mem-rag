@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** embedding default → `voyage-4-lite` via `VOYAGE_MODEL` (D3 update) · eval harness entries (RAG-38-40). (GO-21a–d complete.)
+> **Last updated:** generation moved behind a `GenerationProvider` adapter — `AnthropicGenerationProvider` (default) + `OpenAICompatibleGenerationProvider` (RAG-58-62, D4 update) · embedding default → `voyage-4-lite` via `VOYAGE_MODEL` (D3 update) · eval harness entries (RAG-38-40). (GO-21a–d complete.)
 
 ---
 
@@ -22,10 +22,27 @@
 - **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `HealthModule`
 - **Used by:** `src/main.ts`
 
+### `src/generation/generation-provider.interface.ts`
+- **Purpose:** The generation swap point (TDD §2.5, D4 update) — mirrors `EmbeddingProvider`/`VectorStore`. Abstain-on-empty (D5) stays in `GenerationService`, one layer above; a provider only ever produces one grounded answer from a non-empty chunk list. `supportsCitations` is an honest capability flag — a provider without native citations returns `[]`, never a fabricated imitation.
+- **Defines:** `GenerationProvider` (interface: `supportsCitations`, `generate(question, chunks)`) · `GenerationOutput` (interface) · `Citation` (interface) · `GENERATION_PROVIDER` (DI token, const)
+- **Used by:** `src/generation/anthropic-generation.provider.ts` (implements) · `src/generation/openai-compatible-generation.provider.ts` (implements) · `src/generation/generation.service.ts` · `src/generation/generation.module.ts` (binds token)
+
+### `src/generation/anthropic-generation.provider.ts`
+- **Purpose:** Default `GenerationProvider` impl (D4) — Claude via native citations. Each chunk becomes a `document` content block with `citations: {enabled: true}`; response citations map back to `chunks[document_index]`. `supportsCitations = true`.
+- **Defines:** `AnthropicGenerationProvider` (class) · `AnthropicGenerationProvider.generate(): Promise<GenerationOutput>`
+- **Depends on:** `GenerationProvider`/`Citation`/`GenerationOutput` (interface), `Anthropic` (ctor arg), `ConfigService` (`GENERATION_MODEL`, via the module factory)
+- **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=anthropic`, the default)
+
+### `src/generation/openai-compatible-generation.provider.ts`
+- **Purpose:** Proves the generation seam (add-adapter skill) — any OpenAI-compatible chat-completions endpoint (OpenAI itself, or a self-hosted local server: Ollama, LM Studio, vLLM) via REST (no SDK). No native citations on this surface: `supportsCitations = false`, citations always `[]`. Chunks are inlined as numbered context in the user message.
+- **Defines:** `OpenAICompatibleGenerationProvider` (class) · `OpenAICompatibleGenerationProvider.generate(): Promise<GenerationOutput>`
+- **Depends on:** `GenerationProvider`/`GenerationOutput` (interface), `Logger`, global `fetch`; `baseUrl`/`model`/`apiKey` (ctor args)
+- **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=openai-compatible`)
+
 ### `src/generation/generation.service.ts`
-- **Purpose:** Generation with native citations (RAG-25-30, D4) — retrieve → pass chunks as `document` blocks with citations → cited answer; abstain on empty retrieval (D5).
-- **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `QueryResult` / `Citation` (interfaces) · `ANTHROPIC_CLIENT` (DI token, const)
-- **Depends on:** `ANTHROPIC_CLIENT` (injected `Anthropic`), `RetrievalService`, `ConfigService` (`GENERATION_MODEL`)
+- **Purpose:** Generation orchestration (RAG-25-30, D4) — retrieve → abstain-on-empty (D5, provider-agnostic policy) → delegate to the configured `GenerationProvider` for the model call.
+- **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `QueryResult` (interface, incl. `citationsSupported`)
+- **Depends on:** `GENERATION_PROVIDER` (injected `GenerationProvider`), `RetrievalService`
 - **Used by:** `src/generation/generation.controller.ts`, `src/generation/generation.module.ts`
 
 ### `src/generation/generation.controller.ts`
@@ -35,8 +52,8 @@
 - **Used by:** `src/generation/generation.module.ts` (controller); route consumed by clients/UI
 
 ### `src/generation/generation.module.ts`
-- **Purpose:** Generation feature module — imports `RetrievalModule`, binds `ANTHROPIC_CLIENT` from `ANTHROPIC_API_KEY`.
-- **Defines:** `GenerationModule` (class) · Anthropic client factory
+- **Purpose:** Generation feature module — imports `RetrievalModule`; binds `GENERATION_PROVIDER` via an env-selected factory (`GENERATION_PROVIDER` env: `anthropic` default | `openai-compatible`). Constructs the Anthropic client locally inside the `anthropic` branch only — no client is built when a different provider is selected.
+- **Defines:** `GenerationModule` (class) · `GENERATION_PROVIDER` factory (`useFactory`)
 - **Used by:** `src/app.module.ts`
 
 ### `src/retrieval/retrieval.service.ts`
@@ -171,9 +188,14 @@
 | `VECTOR_STORE` | DI token | `src/vector-store/vector-store.interface.ts` | `src/vector-store/vector-store.module.ts` |
 | `PgVectorStore` | class | `src/vector-store/pgvector.store.ts` | `src/vector-store/vector-store.module.ts` |
 | `VectorStoreModule` | class | `src/vector-store/vector-store.module.ts` | `src/app.module.ts` |
+| `GenerationProvider` | interface | `src/generation/generation-provider.interface.ts` | anthropic + openai-compatible providers, generation service, generation module |
+| `GenerationOutput` | interface | `src/generation/generation-provider.interface.ts` | generation service, both providers |
+| `Citation` | interface | `src/generation/generation-provider.interface.ts` | generation service, both providers |
+| `GENERATION_PROVIDER` | DI token | `src/generation/generation-provider.interface.ts` | `src/generation/generation.service.ts`, `src/generation/generation.module.ts` |
+| `AnthropicGenerationProvider` | class | `src/generation/anthropic-generation.provider.ts` | `src/generation/generation.module.ts` (factory, default) |
+| `OpenAICompatibleGenerationProvider` | class | `src/generation/openai-compatible-generation.provider.ts` | `src/generation/generation.module.ts` (factory) |
 | `GenerationService` | class | `src/generation/generation.service.ts` | generation controller, module |
-| `QueryResult` / `Citation` | interface | `src/generation/generation.service.ts` | generation service + controller |
-| `ANTHROPIC_CLIENT` | DI token | `src/generation/generation.service.ts` | `src/generation/generation.module.ts` |
+| `QueryResult` | interface | `src/generation/generation.service.ts` | generation service + controller |
 | `GenerationController` | class | `src/generation/generation.controller.ts` | `src/generation/generation.module.ts` |
 | `GenerationModule` | class | `src/generation/generation.module.ts` | `src/app.module.ts` |
 | `RetrievalService` | class | `src/retrieval/retrieval.service.ts` | retrieval module; `src/generation/generation.service.ts` |
@@ -211,8 +233,11 @@
 |-----|---------|---------|
 | `PORT` | `src/main.ts` | 3000 |
 | `DATABASE_URL` | `src/database/database.module.ts` | — |
-| `ANTHROPIC_API_KEY` | `src/generation/generation.module.ts` (→ Anthropic client) | — |
-| `GENERATION_MODEL` | `src/generation/generation.service.ts` | claude-opus-4-8 |
+| `ANTHROPIC_API_KEY` | `src/generation/generation.module.ts` (factory, `anthropic` branch only) | — |
+| `GENERATION_PROVIDER` | `src/generation/generation.module.ts` (factory selection) | anthropic |
+| `GENERATION_MODEL` | `src/generation/generation.module.ts` (factory → provider ctor) | claude-opus-4-8 (anthropic) |
+| `GENERATION_BASE_URL` | `src/generation/generation.module.ts` (factory, `openai-compatible` branch only) | — |
+| `GENERATION_API_KEY` | `src/generation/generation.module.ts` (factory, `openai-compatible` branch only) | — |
 | `VOYAGE_API_KEY` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider`) | — |
 | `VOYAGE_MODEL` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider` ctor) | voyage-4-lite |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |

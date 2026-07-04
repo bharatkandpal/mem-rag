@@ -234,3 +234,19 @@
 **Why it matters:** The abstain guarantee is the product's core trust feature, but it's enforced by a threshold — and an uncalibrated threshold fails invisibly: the system looks grounded right up until it confidently answers over junk context.
 **How I handled it:** Tracked as RAG-57: calibrate the floor with before/after eval runs and seed `eval/answers.jsonl` with should-abstain cases, per rule `evals.md` — no vibes-tuning.
 **Explain it in one line:** "An out-of-corpus question cleared our similarity floor — abstention is only as strong as the eval that calibrates the threshold behind it."
+
+---
+
+## Generalizing the generation seam (RAG-58-62, D4 update)
+
+### A capability flag beats a fabricated fallback
+**Concept:** Generalizing generation to any provider (Claude, OpenAI, a local model via Ollama) forced a real fork: Claude's native citations API has no equivalent on other providers. The tempting fix — prompt-engineer a citation format for everyone else — was exactly the approach the original Claude-only decision (D4) had already rejected as brittle, and it would be *more* brittle on a smaller local model, not less. Instead, `GenerationProvider` exposes `supportsCitations: boolean` as an honest capability flag; a provider without native support returns `citations: []`, never an imitation.
+**Why it matters:** A fabricated citation is worse than an absent one — it's the exact shape of ungrounded confidence the whole abstain-on-empty design (D5) exists to prevent, just moved from "no context" to "no verifiable source." Generalizing an interface shouldn't mean quietly generalizing away a trust guarantee.
+**How I handled it:** `supportsCitations` on the interface, `citationsSupported` threaded through to `QueryResult` so callers can render the difference instead of it being silently invisible; the constraint is documented at the interface, in the rule (`ai-and-secrets.md`), and in the `add-adapter` skill so the next provider doesn't quietly violate it.
+**Explain it in one line:** "When I generalized the generation interface, the one thing that couldn't generalize was citation verifiability — so I made it an explicit capability flag instead of faking it uniformly."
+
+### Policy lives above the seam, not inside each adapter
+**Concept:** Abstain-on-empty-retrieval (D5) doesn't need the model at all — it's a decision made from the chunk count alone. So it stays in `GenerationService`, one layer above `GenerationProvider`; a provider is only ever invoked with a non-empty, already-filtered chunk list and never has to implement (or forget to implement) the abstain check itself.
+**Why it matters:** This is the same split the store/retrieval seam already uses (`VectorStore.search` is pure top-k; `RetrievalService` owns the min-score floor) — recognizing the pattern meant the refactor had an obvious shape instead of an ad hoc one, and it guarantees every future provider gets abstain "for free," not as something each implementer has to remember.
+**How I handled it:** `GenerationService.generate()` checks `chunks.length === 0` before ever touching `this.provider`; the provider interface has no abstain-related method at all, so there's nothing to get wrong.
+**Explain it in one line:** "I looked for where this project already drew a policy/mechanism line — the vector store — and put the abstain check on the same side of that line for generation."

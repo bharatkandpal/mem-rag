@@ -1,94 +1,61 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type Anthropic from '@anthropic-ai/sdk';
-import { RetrievedChunk } from '../vector-store/vector-store.interface';
 import { RetrievalService } from '../retrieval/retrieval.service';
+import { RetrievedChunk } from '../vector-store/vector-store.interface';
+import { Citation, GENERATION_PROVIDER, GenerationProvider } from './generation-provider.interface';
 
-/** DI token for the Anthropic client (so it can be mocked in tests). */
-export const ANTHROPIC_CLIENT = 'ANTHROPIC_CLIENT';
-
-const DEFAULT_MODEL = 'claude-opus-4-8';
-const MAX_TOKENS = 1024;
 const ABSTAIN_MESSAGE = "I don't have that information in the corpus.";
-
-const SYSTEM_PROMPT =
-  'You answer strictly from the provided documents. Cite the documents you use. ' +
-  'If the documents do not contain the answer, say you do not have that information ' +
-  'in the corpus — never answer from outside knowledge.';
-
-export interface Citation {
-  citedText: string;
-  source: string; // provenance of the chunk the citation points at
-  documentIndex: number;
-}
 
 export interface QueryResult {
   answer: string;
   citations: Citation[];
   chunks: RetrievedChunk[];
   abstained: boolean;
+  /** Whether the configured provider can verify citations (D4 update) — false for non-citation providers, never faked. */
+  citationsSupported: boolean;
 }
 
 /**
- * Generation with native citations (RAG-25-30, D4). Retrieves, then asks Claude
- * to answer over the retrieved chunks passed as `document` blocks with citations
- * enabled. Abstains without calling the model when retrieval is empty (D5) —
- * grounding is the whole product.
+ * Generation orchestration (RAG-25-30, D4). Retrieves, then delegates to the
+ * configured GenerationProvider for the model call. Mirrors the
+ * store-does-mechanism / service-owns-policy split from retrieval (TDD §2.4):
+ * abstain-on-empty (D5) is policy and lives here, once, regardless of which
+ * provider is configured — a provider never sees an empty chunk list.
  */
 @Injectable()
 export class GenerationService {
   private readonly logger = new Logger(GenerationService.name);
-  private readonly model: string;
 
   constructor(
-    @Inject(ANTHROPIC_CLIENT) private readonly client: Anthropic,
+    @Inject(GENERATION_PROVIDER) private readonly provider: GenerationProvider,
     private readonly retrieval: RetrievalService,
-    config: ConfigService,
-  ) {
-    this.model = config.get<string>('GENERATION_MODEL', DEFAULT_MODEL);
-  }
+  ) {}
 
   async generate(question: string): Promise<QueryResult> {
     const chunks = await this.retrieval.retrieve(question);
 
-    // Abstain on empty retrieval — never free-generate (D5).
+    // Abstain on empty retrieval — never free-generate (D5). Provider-agnostic.
     if (chunks.length === 0) {
       this.logger.log('abstaining: no chunks cleared the score floor');
-      return { answer: ABSTAIN_MESSAGE, citations: [], chunks: [], abstained: true };
+      return {
+        answer: ABSTAIN_MESSAGE,
+        citations: [],
+        chunks: [],
+        abstained: true,
+        citationsSupported: this.provider.supportsCitations,
+      };
     }
 
-    // Each chunk becomes a citable document; document_index maps back to chunks[].
-    const documents: Anthropic.DocumentBlockParam[] = chunks.map((c) => ({
-      type: 'document',
-      source: { type: 'text', media_type: 'text/plain', data: c.content },
-      title: c.source,
-      citations: { enabled: true },
-    }));
+    const { answer, citations } = await this.provider.generate(question, chunks);
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: [...documents, { type: 'text', text: question }] }],
-    });
-
-    let answer = '';
-    const citations: Citation[] = [];
-    for (const block of response.content) {
-      if (block.type !== 'text') continue;
-      answer += block.text;
-      for (const cit of block.citations ?? []) {
-        if (cit.type === 'char_location') {
-          citations.push({
-            citedText: cit.cited_text,
-            source: chunks[cit.document_index]?.source ?? cit.document_title ?? '',
-            documentIndex: cit.document_index,
-          });
-        }
-      }
-    }
-
-    this.logger.log(`generated answer over ${chunks.length} chunks with ${citations.length} citations`);
-    return { answer: answer.trim(), citations, chunks, abstained: false };
+    this.logger.log(
+      `generated answer over ${chunks.length} chunks with ${citations.length} citations`,
+    );
+    return {
+      answer,
+      citations,
+      chunks,
+      abstained: false,
+      citationsSupported: this.provider.supportsCitations,
+    };
   }
 }

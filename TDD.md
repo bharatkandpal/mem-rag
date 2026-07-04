@@ -59,10 +59,17 @@ CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);
 ### 2.4 Retrieval (FR-3)
 `embed(query) → pgvector cosine search top-k → return {content, source, score}`. `k` and a min-score floor are config.
 
-### 2.5 Generation with citations (FR-4)
-- `@anthropic-ai/sdk`, model **`claude-opus-4-8`**.
-- Pass retrieved chunks as `document` content blocks with `citations: {enabled: true}`; the response carries cited spans mapped back to source chunks. Render citations in the UI.
-- If retrieval returns nothing above the floor → **abstain** ("I don't have that in the corpus"), never free-generate.
+### 2.5 Generation (FR-4)
+Behind a `GenerationProvider` interface — the same swap-point discipline as 2.1–2.2:
+```ts
+interface GenerationProvider {
+  readonly supportsCitations: boolean;
+  generate(question: string, chunks: RetrievedChunk[]): Promise<{ answer: string; citations: Citation[] }>;
+}
+```
+- Default impl: `AnthropicGenerationProvider` (`@anthropic-ai/sdk`, model **`claude-opus-4-8`**). Retrieved chunks go in as `document` content blocks with `citations: {enabled: true}`; the response carries cited spans mapped back to source chunks (`supportsCitations = true`). Render citations in the UI.
+- Alt impl (proves the seam): `OpenAICompatibleGenerationProvider` — any OpenAI-compatible chat-completions endpoint (OpenAI itself, or a self-hosted server: Ollama, LM Studio, vLLM), selected via `GENERATION_PROVIDER=openai-compatible` + `GENERATION_BASE_URL` + `GENERATION_MODEL`. No native citations exist on that surface, so `supportsCitations = false` and citations are always `[]` — **never prompt-engineered as a substitute** (D4 update).
+- If retrieval returns nothing above the floor → **abstain** ("I don't have that in the corpus"), never free-generate. This is policy, not mechanism: it lives in `GenerationService` above the provider (mirroring 2.4's store/floor split), so every provider gets the guarantee for free and never sees an empty chunk list.
 
 ### 2.6 API (FR-1, FR-3, FR-5)
 - `POST /ingest` — `{ path }` → ingestion stats.

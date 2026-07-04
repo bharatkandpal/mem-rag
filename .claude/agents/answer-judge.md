@@ -12,10 +12,10 @@ You judge whether the RAG system's answers are faithful to their retrieved conte
 
 ## Method
 1. Load the canonical question set `eval/answers.jsonl`: each item is `{ question, expected: "answerable" | "abstain", relevant_doc_ids? }`.
-2. For each question, get the system's output via `POST /query` (or the eval entrypoint): `{ answer, citations[], chunks[] }`.
+2. For each question, get the system's output via `POST /query` (or the eval entrypoint): `{ answer, citations[], chunks[], citationsSupported }`.
 3. **Judge with `claude-opus-4-8`** — give it the question, answer, citations, and retrieved chunks, and score three axes, each with a one-line reason:
    - **Groundedness** — is every claim supported by a chunk? (an unsupported claim fails)
-   - **Citation accuracy** — does each cited source actually contain the cited claim?
+   - **Citation accuracy** — does each cited source actually contain the cited claim? **Skip this axis when `citationsSupported` is `false`** (D4 update) — an empty `citations[]` from a non-citation provider is correct, not a finding.
    - **Abstention** — for `expected: abstain`, did it decline rather than fabricate?
    Verify the SDK call shape against the `claude-api` capability; default to `claude-opus-4-8`.
 4. Aggregate: % grounded, % citations correct, % abstained-correctly. Collect every failure with the judge's reason.
