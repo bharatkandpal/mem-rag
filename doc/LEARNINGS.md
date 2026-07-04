@@ -250,3 +250,19 @@
 **Why it matters:** This is the same split the store/retrieval seam already uses (`VectorStore.search` is pure top-k; `RetrievalService` owns the min-score floor) — recognizing the pattern meant the refactor had an obvious shape instead of an ad hoc one, and it guarantees every future provider gets abstain "for free," not as something each implementer has to remember.
 **How I handled it:** `GenerationService.generate()` checks `chunks.length === 0` before ever touching `this.provider`; the provider interface has no abstain-related method at all, so there's nothing to get wrong.
 **Explain it in one line:** "I looked for where this project already drew a policy/mechanism line — the vector store — and put the abstain check on the same side of that line for generation."
+
+---
+
+## The CLI wrapper (GO-21h, RAG-52-55)
+
+### One pipeline, two entrypoints — the CLI is a client of the services, not of the API
+**Concept:** The `rag` CLI doesn't call `POST /ingest`/`POST /query` — it bootstraps the Nest application context in-process (`NestFactory.createApplicationContext`, the same pattern the eval runner already used) and calls `IngestionService`/`GenerationService` directly. HTTP is just one transport over the pipeline; the CLI is another.
+**Why it matters:** Shelling out to the API would have coupled the CLI to a running server and duplicated request/response handling; re-implementing the pipeline would have forked the logic. In-process reuse means every behavior — chunking, idempotent upsert, the abstain policy, provider selection — is identical across API, CLI, and eval harness by construction, not by discipline.
+**How I handled it:** `src/cli/main.ts` is pure wiring (commander + app context); all output shaping lives in `src/cli/format.ts`, a dependency-free module that unit-tests without DI. The abstain answer passes through verbatim, and a non-citation provider gets an honest capability note — the CLI renders trust properties, it doesn't invent them.
+**Explain it in one line:** "The CLI bootstraps the same Nest app context the eval harness uses and calls the services in-process — one pipeline, three entrypoints, zero duplicated logic."
+
+### Verify what the blocker doesn't block
+**Concept:** The live cited-answer check is blocked on Anthropic credits — but most of the CLI's surface isn't behind that blocker. `rag ingest` verified live end-to-end (4 docs → 9 chunks), and the abstain path was forced with `MIN_SCORE=0.99` — it fires *before* the provider call, so it proves the full CLI → retrieval → policy path with no model at all. Provider errors surface on stderr with exit 1.
+**Why it matters:** "Blocked" is rarely binary. Decomposing the done-when into blocked vs. verifiable slices turned a stalled milestone into one with a single, well-scoped residual (re-run the cited-answer smoke after credits top-up) instead of a vague "couldn't test."
+**How I handled it:** The env-tunable floor doubled as a test seam: raising it to 0.99 exercised abstain deterministically. The gibberish probe at the default floor also re-confirmed RAG-57 (junk still clears 0.2) — the calibration task now has two live data points.
+**Explain it in one line:** "When the API was blocked, I verified everything in front of the API call — including forcing abstain via the score floor as a natural test seam."

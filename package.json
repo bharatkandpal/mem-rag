@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "RAG knowledge-store chat with citation-grounded answers",
+  "bin": {
+    "rag": "dist/cli/main.js"
+  },
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
@@ -18,6 +21,7 @@
     "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.4.4",
     "@nestjs/platform-express": "^10.4.4",
+    "commander": "^12.1.0",
     "gpt-tokenizer": "^2.8.1",
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.2",

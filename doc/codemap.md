@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** generation moved behind a `GenerationProvider` adapter — `AnthropicGenerationProvider` (default) + `OpenAICompatibleGenerationProvider` (RAG-58-62, D4 update) · embedding default → `voyage-4-lite` via `VOYAGE_MODEL` (D3 update) · eval harness entries (RAG-38-40). (GO-21a–d complete.)
+> **Last updated:** `rag` CLI added (GO-21h, RAG-52-54) — `src/cli/main.ts` (commander entrypoint, `bin: rag`) + `src/cli/format.ts` (pure stdout formatting); reuses `IngestionService`/`GenerationService` in-process via app context, no HTTP. Prior: generation behind `GenerationProvider` adapter (RAG-58-62, D4 update).
 
 ---
 
@@ -21,6 +21,18 @@
 - **Defines:** `AppModule` (class)
 - **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `HealthModule`
 - **Used by:** `src/main.ts`
+
+### `src/cli/main.ts`
+- **Purpose:** The `rag` CLI entrypoint (GO-21h, RAG-52) — commander program with `ingest <path>` and `query <question>` subcommands. Bootstraps `NestFactory.createApplicationContext(AppModule, { logger: false })` (same pattern as `eval/run-eval.ts`) and calls services in-process — no HTTP. Registered as `bin: { "rag": "dist/cli/main.js" }` in `package.json`. Errors → stderr, exit 1.
+- **Defines:** `withApp` (file-private helper) · commander `program` (self-executing)
+- **Depends on:** `AppModule`, `IngestionService`, `GenerationService`, `formatIngestStats`/`formatQueryResult` (`./format`), `commander`
+- **Used by:** — (entrypoint; invoked as `rag` / `node dist/cli/main.js`)
+
+### `src/cli/format.ts`
+- **Purpose:** Pure stdout formatting for the CLI (RAG-53/54) — no Nest/DI, unit-testable in isolation. Abstain answers pass through verbatim (D5); when a non-citation provider answered, prints an honest capability note instead of fabricated citations (RAG-62).
+- **Defines:** `formatIngestStats(path, stats): string` · `formatQueryResult(result): string`
+- **Depends on:** `IngestStats` (`../ingestion/ingestion.service`), `QueryResult` (`../generation/generation.service`) — types only
+- **Used by:** `src/cli/main.ts` · `src/cli/format.spec.ts`
 
 ### `src/generation/generation-provider.interface.ts`
 - **Purpose:** The generation swap point (TDD §2.5, D4 update) — mirrors `EmbeddingProvider`/`VectorStore`. Abstain-on-empty (D5) stays in `GenerationService`, one layer above; a provider only ever produces one grounded answer from a non-empty chunk list. `supportsCitations` is an honest capability flag — a provider without native citations returns `[]`, never a fabricated imitation.
