@@ -282,3 +282,13 @@
 **Why it matters:** Folding abstain cases into hit-rate would have made both numbers lie (the README's "100%" would drop for the wrong reason). Two named metrics keep each number meaning one thing — and the abstain gate means a future floor/embedding change that reopens the leak fails CI instead of shipping silently.
 **How I handled it:** `computeAbstain` beside `computeMetrics`; `formatTable` renders a separate should-abstain section; the runner gates on both rates independently.
 **Explain it in one line:** "When a failure mode isn't measured, add it to the eval set as its own metric — a mixed-together number hides exactly the regression you built the harness to catch."
+
+---
+
+## The /query integration test (RAG-45)
+
+### Integration-test the graph, mock the process boundaries
+**Concept:** The test boots the *real* `AppModule` — controller, `GenerationService`, `RetrievalService`, config, validation — over actual HTTP (supertest), and replaces only the four things that cross a process boundary (embedder, vector store, generation provider, pg pool), each at its DI token. The adapter seams built for vendor-swapping turned out to be exactly the test seams.
+**Why it matters:** Unit tests had each service right but nothing proved the wiring: module factories, token bindings, the controller's validation, and the abstain policy composing across services. This catches the class of bug where every part works and the whole doesn't — without needing Postgres or API keys in CI.
+**How I handled it:** `Test.createTestingModule({ imports: [AppModule] })` + `overrideProvider(TOKEN)` for the four boundary tokens; asserts the cited happy path, the abstain path (provider verifiably never invoked), and 400s on bad input.
+**Explain it in one line:** "The same DI tokens that make providers swappable make the app integration-testable — override exactly the process boundaries and run everything else for real."
