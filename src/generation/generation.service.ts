@@ -31,6 +31,7 @@ export class GenerationService {
   ) {}
 
   async generate(question: string): Promise<QueryResult> {
+    const started = Date.now();
     const chunks = await this.retrieval.retrieve(question);
 
     // Abstain on empty retrieval — never free-generate (D5). Provider-agnostic.
@@ -48,7 +49,7 @@ export class GenerationService {
     const { answer, citations } = await this.provider.generate(question, chunks);
 
     this.logger.log(
-      `generated answer over ${chunks.length} chunks with ${citations.length} citations`,
+      `generated answer over ${chunks.length} chunks with ${citations.length} citations in ${Date.now() - started}ms`,
     );
     return {
       answer,

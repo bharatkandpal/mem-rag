@@ -86,8 +86,8 @@
 
 ## Cross-cutting / NFR  (TDD §3)
 
-- [~] RAG-42 — Structured logging baseline (pino or Nest logger)  · TDD §3 — Nest Logger + counts on ingest **and** query paths (grep-verified); latency (ms) is ingest-only — add timing to `retrieve`/`generate` to close
-- [ ] RAG-43 — Secrets env-only; confirm none committed/logged  · rule `ai-and-secrets.md`
+- [x] RAG-42 — Structured logging baseline (pino or Nest logger)  · TDD §3 — Nest Logger with counts **and** latency (ms) on ingest, retrieve, and generate paths
+- [x] RAG-43 — Secrets env-only; confirm none committed/logged  · rule `ai-and-secrets.md` — audited: `.env` git-ignored + never tracked; no key patterns in tracked files; no keys in logger calls
 - [x] RAG-44 — Jest setup + unit tests (chunking, adapters)  · TDD §3 — chunker, loader, Voyage adapter, pgvector store, retrieval, generation + eval-metrics specs all in place
 - [ ] RAG-45 — Integration test: `/query` happy path  · TDD §3
 - [ ] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4

@@ -35,11 +35,12 @@ export class RetrievalService {
   }
 
   async retrieve(query: string): Promise<RetrievedChunk[]> {
+    const started = Date.now();
     const [embedding] = await this.embedder.embed([query]);
     const hits = await this.store.search(embedding, this.k);
     const kept = hits.filter((h) => h.score >= this.minScore);
     this.logger.log(
-      `retrieve: ${hits.length} hits, ${kept.length} above floor ${this.minScore} (k=${this.k})`,
+      `retrieve: ${hits.length} hits, ${kept.length} above floor ${this.minScore} (k=${this.k}) in ${Date.now() - started}ms`,
     );
     return kept;
   }
