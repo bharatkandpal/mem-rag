@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** `rag` CLI added (GO-21h, RAG-52-54) — `src/cli/main.ts` (commander entrypoint, `bin: rag`) + `src/cli/format.ts` (pure stdout formatting); reuses `IngestionService`/`GenerationService` in-process via app context, no HTTP. Prior: generation behind `GenerationProvider` adapter (RAG-58-62, D4 update).
+> **Last updated:** RAG-57 floor calibration — `MIN_SCORE` default 0.2 → 0.3; eval harness gains should-abstain entries (`relevant_doc_ids: []`), `computeAbstain`, an abstain-rate summary + gate (`EVAL_MIN_ABSTAIN_RATE`), and `eval/probe-scores.ts` (ad-hoc score-distribution probe). Prior: `rag` CLI (GO-21h, RAG-52-54) — `src/cli/main.ts` + `src/cli/format.ts`, services in-process, no HTTP.
 
 ---
 
@@ -170,16 +170,22 @@
 - **Used by:** `src/health/health.module.ts` (controller); route consumed by clients / docker healthcheck path
 
 ### `eval/metrics.ts`
-- **Purpose:** Pure eval metric functions (RAG-39) — no I/O, NestJS, or network, so they're trivially unit-testable (`metrics.spec.ts`).
-- **Defines:** `computeMetrics(chunks, relevantDocIds): { hit, precision }` · `formatTable(results, k): string` · `EvalEntry` (interface) · `EvalResult` (interface)
+- **Purpose:** Pure eval metric functions (RAG-39, RAG-57) — no I/O, NestJS, or network, so they're trivially unit-testable (`metrics.spec.ts`). An `EvalEntry` with empty `relevant_doc_ids` is a should-abstain (out-of-corpus) case.
+- **Defines:** `computeMetrics(chunks, relevantDocIds): { hit, precision }` · `computeAbstain(chunks): { hit, precision }` · `formatTable(results, k): string` (separate hit-rate + abstain-rate summaries) · `EvalEntry` (interface) · `EvalResult` (interface, incl. `expectAbstain?`)
 - **Depends on:** `RetrievedChunk` (`src/vector-store/vector-store.interface`)
 - **Used by:** `eval/run-eval.ts`, `eval/metrics.spec.ts`
 
 ### `eval/run-eval.ts`
-- **Purpose:** Eval runner (RAG-40) — bootstraps the real DI graph (`createApplicationContext`, no HTTP server), runs `RetrievalService.retrieve()` over `eval/dataset.jsonl`, prints the per-question table + summary, exits 1 when hit-rate < `EVAL_MIN_HIT_RATE`.
+- **Purpose:** Eval runner (RAG-40, RAG-57) — bootstraps the real DI graph (`createApplicationContext`, no HTTP server), runs `RetrievalService.retrieve()` over `eval/dataset.jsonl`, prints the per-question table + summary, exits 1 when hit-rate < `EVAL_MIN_HIT_RATE` or abstain-rate < `EVAL_MIN_ABSTAIN_RATE`.
 - **Defines:** `main(): Promise<void>` (file-private entrypoint)
-- **Depends on:** `AppModule`, `RetrievalService`, `computeMetrics`/`formatTable`/`EvalEntry`/`EvalResult` (`./metrics`), `fs`/`path`
+- **Depends on:** `AppModule`, `RetrievalService`, `computeAbstain`/`computeMetrics`/`formatTable`/`EvalEntry`/`EvalResult` (`./metrics`), `fs`/`path`
 - **Used by:** — (entrypoint; `npm run eval` via ts-node + `tsconfig.eval.json`)
+
+### `eval/probe-scores.ts`
+- **Purpose:** Ad-hoc score-distribution probe (RAG-57) — prints raw top-k similarity scores for in-corpus vs. out-of-corpus questions, bypassing the `MIN_SCORE` floor; the data behind floor calibration. Not part of `npm run eval`.
+- **Defines:** `main()` / `OUT_OF_CORPUS` (file-private)
+- **Depends on:** `AppModule`, `EMBEDDING_PROVIDER`/`VECTOR_STORE` (tokens), `EvalEntry` (`./metrics`), `fs`/`path`
+- **Used by:** — (entrypoint; `ts-node --project tsconfig.eval.json eval/probe-scores.ts`)
 
 ---
 
@@ -228,8 +234,9 @@
 | `HealthController.check` | method | `src/health/health.controller.ts` | route `GET /healthz` |
 | `HealthReport` | interface | `src/health/health.controller.ts` | `src/health/health.controller.ts` (return type) |
 | `computeMetrics` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
+| `computeAbstain` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
 | `formatTable` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
-| `EvalEntry` / `EvalResult` | interface | `eval/metrics.ts` | `eval/run-eval.ts` |
+| `EvalEntry` / `EvalResult` | interface | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/probe-scores.ts` |
 
 ## HTTP routes
 
@@ -254,10 +261,11 @@
 | `VOYAGE_MODEL` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider` ctor) | voyage-4-lite |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
 | `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` · `eval/run-eval.ts` (table label) | 5 |
-| `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.2 |
+| `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.3 (calibrated, RAG-57) |
 | `CHUNK_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 512 |
 | `OVERLAP_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 64 |
 | `EVAL_MIN_HIT_RATE` | `eval/run-eval.ts` (CI gate: exit 1 below floor) | 0.5 |
+| `EVAL_MIN_ABSTAIN_RATE` | `eval/run-eval.ts` (CI gate: exit 1 below floor) | 0.5 |
 
 ## Non-code assets (referenced by build/runtime)
 
@@ -266,7 +274,7 @@
 | `db/init/001_init.sql` | `docker-compose.yml` (db initdb mount) | `vector` extension + `chunks` table + HNSW index |
 | `docker-compose.yml` | `docker compose up` | app + pgvector services |
 | `Dockerfile` | `docker-compose.yml` (app build) | build/run the Nest app |
-| `eval/dataset.jsonl` | `eval/run-eval.ts` | labeled eval set (`question` → `relevant_doc_ids[]`) |
+| `eval/dataset.jsonl` | `eval/run-eval.ts` · `eval/probe-scores.ts` | labeled eval set (`question` → `relevant_doc_ids[]`; empty = should abstain) |
 | `eval/sample-corpus/` | `POST /ingest` before an eval run | **frozen** fixture corpus the dataset labels are tied to (rule `evals.md`) |
 | `tsconfig.eval.json` | `npm run eval` (ts-node `--project`) · typecheck hook | extends root tsconfig, adds `eval/**` (kept out of `nest build`) |
 | `jest.config.js` | `npm test` | ts-jest; roots `src/` + `eval/` |

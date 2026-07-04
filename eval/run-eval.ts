@@ -5,6 +5,7 @@ import { join } from 'path';
 import { AppModule } from '../src/app.module';
 import { RetrievalService } from '../src/retrieval/retrieval.service';
 import {
+  computeAbstain,
   computeMetrics,
   EvalEntry,
   EvalResult,
@@ -27,8 +28,11 @@ async function main(): Promise<void> {
   const results: EvalResult[] = [];
   for (const entry of entries) {
     const chunks = await retrieval.retrieve(entry.question);
-    const { hit, precision } = computeMetrics(chunks, entry.relevant_doc_ids);
-    results.push({ question: entry.question, hit, precision });
+    const expectAbstain = entry.relevant_doc_ids.length === 0;
+    const { hit, precision } = expectAbstain
+      ? computeAbstain(chunks)
+      : computeMetrics(chunks, entry.relevant_doc_ids);
+    results.push({ question: entry.question, hit, precision, expectAbstain });
   }
 
   await app.close();
@@ -36,13 +40,28 @@ async function main(): Promise<void> {
   const k = Number(process.env.RETRIEVAL_K ?? 5);
   console.log(formatTable(results, k));
 
-  const hitRate = results.filter((r) => r.hit).length / results.length;
+  const answerable = results.filter((r) => !r.expectAbstain);
+  const hitRate =
+    answerable.filter((r) => r.hit).length / (answerable.length || 1);
   const minHitRate = Number(process.env.EVAL_MIN_HIT_RATE ?? 0.5);
   if (hitRate < minHitRate) {
     console.error(
       `\nFAIL: hit-rate ${(hitRate * 100).toFixed(1)}% is below floor ${(minHitRate * 100).toFixed(1)}%`,
     );
     process.exit(1);
+  }
+
+  // Abstain gate (RAG-57): out-of-corpus entries must return nothing above the floor.
+  const abstain = results.filter((r) => r.expectAbstain);
+  if (abstain.length > 0) {
+    const abstainRate = abstain.filter((r) => r.hit).length / abstain.length;
+    const minAbstainRate = Number(process.env.EVAL_MIN_ABSTAIN_RATE ?? 0.5);
+    if (abstainRate < minAbstainRate) {
+      console.error(
+        `\nFAIL: abstain-rate ${(abstainRate * 100).toFixed(1)}% is below floor ${(minAbstainRate * 100).toFixed(1)}%`,
+      );
+      process.exit(1);
+    }
   }
 }
 

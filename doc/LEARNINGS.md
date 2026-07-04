@@ -266,3 +266,19 @@
 **Why it matters:** "Blocked" is rarely binary. Decomposing the done-when into blocked vs. verifiable slices turned a stalled milestone into one with a single, well-scoped residual (re-run the cited-answer smoke after credits top-up) instead of a vague "couldn't test."
 **How I handled it:** The env-tunable floor doubled as a test seam: raising it to 0.99 exercised abstain deterministically. The gibberish probe at the default floor also re-confirmed RAG-57 (junk still clears 0.2) — the calibration task now has two live data points.
 **Explain it in one line:** "When the API was blocked, I verified everything in front of the API call — including forcing abstain via the score floor as a natural test seam."
+
+---
+
+## Calibrating the abstain floor (RAG-57)
+
+### Measure the two distributions before picking a threshold
+**Concept:** The floor was calibrated by printing raw top-k scores for every labeled in-corpus question next to six out-of-corpus probes (`eval/probe-scores.ts`, floor bypassed). In-corpus top-1 ranged 0.33–0.63; easy junk peaked at 0.22–0.25 — but a tech-adjacent question hit 0.37 and pure gibberish 0.355, both *above* the weakest legitimate question (0.331). The distributions overlap: no global floor can separate them.
+**Why it matters:** The original 0.2 was a guess, and the replacement could easily have been another guess. Measuring first turned the decision from "pick a nicer-looking number" into "place a line where the data says the trade-off is" — and, more importantly, revealed that the perfect line doesn't exist, which is itself the finding.
+**How I handled it:** `MIN_SCORE` 0.2 → 0.3: eval before → after: hit-rate 10/10 → 10/10, precision@5 0.42 → 0.43, abstain-rate 0/6 → 4/6. The two residual leaks are documented in the README and kept in the eval set as failing-honest entries — closing them is answer-level grounding's job (Claude answering only from documents), not the retrieval floor's.
+**Explain it in one line:** "I printed the in-corpus and out-of-corpus score distributions side by side, put the floor where recall survives, and documented the overlap a similarity threshold can't fix."
+
+### Should-abstain cases belong in the eval set, as their own metric
+**Concept:** "Retrieval quality" was only being measured in one direction — does a real question find its chunks? The failure that actually bit (junk clearing the floor) was invisible to the harness. The dataset now encodes out-of-corpus questions as `relevant_doc_ids: []`, scored as a separate **abstain-rate** with its own CI gate (`EVAL_MIN_ABSTAIN_RATE`), rather than polluting hit-rate.
+**Why it matters:** Folding abstain cases into hit-rate would have made both numbers lie (the README's "100%" would drop for the wrong reason). Two named metrics keep each number meaning one thing — and the abstain gate means a future floor/embedding change that reopens the leak fails CI instead of shipping silently.
+**How I handled it:** `computeAbstain` beside `computeMetrics`; `formatTable` renders a separate should-abstain section; the runner gates on both rates independently.
+**Explain it in one line:** "When a failure mode isn't measured, add it to the eval set as its own metric — a mixed-together number hides exactly the regression you built the harness to catch."

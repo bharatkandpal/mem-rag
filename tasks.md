@@ -39,7 +39,7 @@
 - [x] RAG-23 — Retrieval service returns `{ content, source, score }[]`  · TDD §2.4
 - [x] RAG-24 — `RETRIEVAL_K` configurable  · TDD §3
 
-> ✅ **Eval-validated:** hit-rate 10/10 (100%), avg precision@5 0.42 — `voyage-4-lite` baseline over the 10-question set (see README). Caveat → RAG-57: `MIN_SCORE=0.2` let an out-of-corpus question through (1/5 hits cleared the floor), so the code-level abstain (D5) didn't fire.
+> ✅ **Eval-validated:** hit-rate 10/10 (100%), avg precision@5 0.43, abstain-rate 4/6 — `voyage-4-lite`, `MIN_SCORE=0.3` (calibrated, RAG-57; see README). Two documented abstain leaks (tech-adjacent + gibberish ≈0.35–0.37) are beyond what a global floor can separate.
 
 ## Milestone GO-21d — Generation with citations  (PRD FR-4)
 
@@ -95,7 +95,7 @@
 - [~] RAG-50 — Keep `doc/codemap.md` current after every code change (ongoing)  · rule `coding-standards.md`, `codemap` skill
 - [~] RAG-51 — Append to `doc/LEARNINGS.md` after each build slice (ongoing)  · the revisit/teach log, distinct from ADRs
 - [ ] RAG-56 — Second `EmbeddingProvider` impl (OpenAI or local), env-selected — proves the swap seam  · PRD FR-2 acceptance, TDD §2.1, GO-21 quality bar, `add-adapter` skill (mind the dims trap)
-- [ ] RAG-57 — Calibrate `MIN_SCORE` so out-of-corpus questions abstain (live finding: "capital of France" cleared the 0.2 floor) — retrieval-affecting → before/after eval; seed `eval/answers.jsonl` with should-abstain cases  · D5, `retrieval-tuner`
+- [x] RAG-57 — Calibrate `MIN_SCORE` so out-of-corpus questions abstain  · D5 — floor 0.2 → 0.3, from measured score distributions (`eval/probe-scores.ts`); eval before → after: hit-rate 10/10 → 10/10, prec@5 0.42 → 0.43, abstain-rate 0/6 → **4/6**. Dataset seeded with 6 should-abstain entries + abstain-rate metric/gate (`EVAL_MIN_ABSTAIN_RATE`). Known residual: tech-adjacent junk + gibberish score ≈0.35–0.37, *above* the weakest legit question (0.33) — unfixable by a global floor; documented in README, left failing-honest in the eval set for answer-level grounding
 
 ## Wrap-up
 

@@ -8,3 +8,9 @@
 {"question": "How do I run the project locally?", "relevant_doc_ids": ["README.md"]}
 {"question": "What are the build milestones and their order?", "relevant_doc_ids": ["GO-21.md"]}
 {"question": "What is the purpose of the swappable embedding adapter?", "relevant_doc_ids": ["TDD.md", "PRD.md"]}
+{"question": "What is the capital of France?", "relevant_doc_ids": []}
+{"question": "How do I bake sourdough bread?", "relevant_doc_ids": []}
+{"question": "Who won the 2022 FIFA World Cup?", "relevant_doc_ids": []}
+{"question": "How do I configure a Kubernetes ingress controller?", "relevant_doc_ids": []}
+{"question": "What does the useEffect hook do in React?", "relevant_doc_ids": []}
+{"question": "zxqvw blorptang frimble?", "relevant_doc_ids": []}

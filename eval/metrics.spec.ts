@@ -1,4 +1,4 @@
-import { computeMetrics, formatTable } from './metrics';
+import { computeAbstain, computeMetrics, formatTable } from './metrics';
 import { RetrievedChunk } from '../src/vector-store/vector-store.interface';
 
 const chunk = (source: string, score = 0.9): RetrievedChunk => ({
@@ -61,5 +61,32 @@ describe('formatTable', () => {
     const results = [{ question: longQ, hit: true, precision: 1 }];
     const output = formatTable(results, 5);
     expect(output).toContain('...');
+  });
+});
+
+describe('computeAbstain (RAG-57)', () => {
+  it('is correct when nothing cleared the floor', () => {
+    expect(computeAbstain([])).toEqual({ hit: true, precision: 1 });
+  });
+
+  it('is incorrect when chunks leaked through the floor', () => {
+    expect(computeAbstain([chunk('TDD.md', 0.35)])).toEqual({
+      hit: false,
+      precision: 0,
+    });
+  });
+});
+
+describe('formatTable with abstain entries', () => {
+  it('reports abstain-rate separately from hit-rate', () => {
+    const results = [
+      { question: 'q1', hit: true, precision: 0.5, expectAbstain: false },
+      { question: 'junk', hit: true, precision: 1, expectAbstain: true },
+      { question: 'junk2', hit: false, precision: 0, expectAbstain: true },
+    ];
+    const output = formatTable(results, 5);
+    expect(output).toContain('hit-rate: 1/1');
+    expect(output).toContain('abstain-rate: 1/2');
+    expect(output).toContain('should abstain');
   });
 });

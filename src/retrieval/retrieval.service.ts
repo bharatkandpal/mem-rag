@@ -11,7 +11,10 @@ import {
 } from '../vector-store/vector-store.interface';
 
 const DEFAULT_K = 5;
-const DEFAULT_MIN_SCORE = 0.2;
+// Calibrated from measured score distributions (RAG-57, eval/probe-scores.ts):
+// 0.3 abstains on most out-of-corpus queries while every labeled in-corpus
+// question still clears it. Known residual: tech-adjacent junk can score ~0.35+.
+const DEFAULT_MIN_SCORE = 0.3;
 
 /**
  * Retrieval (RAG-20/23): embed the query, fetch cosine top-k from the store,

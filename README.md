@@ -29,14 +29,17 @@ curl -s localhost:3000/healthz
 DATABASE_URL=postgresql://rag:rag@localhost:5432/rag npm run eval
 ```
 
-Baseline over the 10-question sample corpus (`eval/dataset.jsonl`, `eval/sample-corpus/`), embeddings `voyage-4-lite`:
+Baseline over the labeled set (`eval/dataset.jsonl`: 10 answerable + 6 should-abstain questions, `eval/sample-corpus/`), embeddings `voyage-4-lite`, `MIN_SCORE=0.3`:
 
 | Metric | Score |
 |--------|-------|
 | Hit-rate | **100%** (10/10) |
-| Avg precision@5 | **0.42** |
+| Avg precision@5 | **0.43** |
+| Abstain-rate (out-of-corpus) | **67%** (4/6) |
 
 (With 9 chunks total and k=5, ~0.4–0.6 is the structural precision ceiling — hit-rate is the headline metric at this corpus size.)
+
+The score floor was calibrated from measured distributions (`eval/probe-scores.ts`): raising `MIN_SCORE` 0.2 → 0.3 took abstain-rate from 0/6 to 4/6 with hit-rate unchanged. The two remaining leaks (a tech-adjacent question and pure gibberish, cosine ≈ 0.35–0.37) sit *above* the weakest legitimate question (0.33) — a global similarity floor cannot separate them, so they stay in the eval set as documented gaps for answer-level grounding to catch.
 
 Run `npm run eval` after any retrieval change (chunk size, `k`, `MIN_SCORE`, embedding model) to confirm the number holds.
 
