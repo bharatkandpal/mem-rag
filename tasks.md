@@ -99,7 +99,7 @@
 
 ## Wrap-up
 
-- [ ] RAG-48 — Production README: problem, architecture diagram, key decisions, eval numbers, configuration, roadmap (multi-agent = future work, D8)
+- [x] RAG-48 — Production README: problem, architecture diagram (mermaid), key decisions, eval numbers, configuration, roadmap (multi-agent = future work, D8) — quick start / CLI / eval commands runtime-verified as written; host-vs-container `DATABASE_URL` split fixed, compose `MIN_SCORE` fallback aligned to 0.3
 - [ ] RAG-49 — Demo recording (GIF / short video) + clean commit history
 
 ---
