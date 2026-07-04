@@ -26,7 +26,7 @@ services:
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-voyage}
       RETRIEVAL_K: ${RETRIEVAL_K:-5}
-      MIN_SCORE: ${MIN_SCORE:-0.2}
+      MIN_SCORE: ${MIN_SCORE:-0.3}
     ports:
       - "3000:3000"
     volumes:

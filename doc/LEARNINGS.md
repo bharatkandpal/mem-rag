@@ -292,3 +292,12 @@
 **Why it matters:** Unit tests had each service right but nothing proved the wiring: module factories, token bindings, the controller's validation, and the abstain policy composing across services. This catches the class of bug where every part works and the whole doesn't — without needing Postgres or API keys in CI.
 **How I handled it:** `Test.createTestingModule({ imports: [AppModule] })` + `overrideProvider(TOKEN)` for the four boundary tokens; asserts the cited happy path, the abstain path (provider verifiably never invoked), and 400s on bad input.
 **Explain it in one line:** "The same DI tokens that make providers swappable make the app integration-testable — override exactly the process boundaries and run everything else for real."
+
+---
+
+## Production README (GO-22)
+
+### One connection string cannot serve two network namespaces
+**Concept:** `.env.example` shipped `DATABASE_URL=...@db:5432` — correct inside the compose network, wrong for every host-side tool (CLI, eval harness), which all needed a manual override. The fix: compose already injects its own `DATABASE_URL` for the container, so `.env` now carries the *host* view (`localhost:5432`) and each runtime gets the URL that's true for its own network namespace.
+**Why it matters:** The quick start is part of the product — a README command that fails on first copy-paste costs more credibility than a missing feature. The same audit caught compose's `MIN_SCORE` fallback still at the pre-calibration 0.2: config duplicated across files drifts unless something forces a sweep.
+**Explain it in one line:** "The container and the host see different networks, so the env file carries the host's truth and compose injects the container's — and every README command got run before it got written."
