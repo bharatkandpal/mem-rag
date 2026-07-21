@@ -55,9 +55,11 @@
 - [x] RAG-61 — `GENERATION_PROVIDER` env-selected factory in `GenerationModule` (default `anthropic`)  · TDD §2.5
 - [x] RAG-62 — `QueryResult.citationsSupported` — honest per-provider capability flag surfaced through `POST /query`  · D4 update, rule `ai-and-secrets.md`
 
-> ⚠️ Generation is implemented + unit-tested (mocked Anthropic client) but the live `/query` smoke is **blocked on Anthropic API credits** (billing — the account returned "credit balance too low"). Retrieval feeding it is eval-validated; re-run the smoke (cited answer + abstain) once credits are topped up.
+> ✅ **Live-verified 2026-07-17.** Generation is implemented + unit-tested (mocked Anthropic client) **and** now smoke-verified live end-to-end via the CLI (`rag query`): grounded answer with 7 native Claude citations mapped back to source chunks, plus the abstain path. Earlier credits/billing blocker is cleared.
 
 ## Milestone GO-21e — Minimal chat UI  (PRD FR-5) — **DEFERRED** (see GO-21.md)
+
+> ⛔ **Gated on RAG-63 (observability framework):** no UI work starts until the observability framework lands — a user-facing surface without request tracing / metrics / error surfacing is not shippable here. UI itself is low-effort (the `/query` contract already returns `{answer, citations[], chunks[], citationsSupported}`); the gate is deliberate, not a size estimate.
 
 - [ ] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7
 - [ ] RAG-32 — Render answer + clickable citations  · TDD §2.7
@@ -69,6 +71,7 @@
 - [ ] RAG-35 — Provision managed Postgres with pgvector  · TDD §4
 - [ ] RAG-36 — Deploy app + apply schema/migrations on the host  · TDD §4
 - [ ] RAG-37 — Public URL live + reachable `/healthz`  · GO-21f
+- [ ] RAG-64 — **IaC + Kubernetes deployment module** — container image + Helm chart / manifests in a **separate IaC module** (not app code); local cluster via minikube, so the service can be embedded inside other applications. **Depends on RAG-46** (a real migration runner — initdb-only won't survive a k8s/managed-Postgres deploy).  · TDD §4, deploy track
 
 ## Milestone GO-21g — Retrieval eval harness  (PRD FR-6) — the quality gate
 
@@ -82,7 +85,13 @@
 - [x] RAG-52 — CLI entrypoint: `src/cli/main.ts` (commander) + `"bin": { "rag": "dist/cli/main.js" }`  · GO-21h, `cli` skill
 - [x] RAG-53 — `rag ingest <path>` — `IngestionService` in-process (app context, no HTTP) → stats to stdout  · `cli` skill — **live-verified**: 4 docs → 9 chunks over `eval/sample-corpus`
 - [x] RAG-54 — `rag query <question>` — `GenerationService` in-process → answer + citations to stdout; abstain passes through verbatim  · `cli` skill — abstain path live-verified (verbatim message, exit 0, no model call); provider errors → stderr, exit 1
-- [~] RAG-55 — **Runtime-verify**: `npx rag query "…"` returns a cited answer in the terminal  · GO-21h done-when — wiring + abstain verified live; the **cited-answer** smoke shares the GO-21d blocker (Anthropic API credits) — re-run once topped up
+- [x] RAG-55 — **Runtime-verify**: `npx rag query "…"` returns a cited answer in the terminal  · GO-21h done-when — **live-verified 2026-07-17**: `npx rag query "How is retrieval scored?"` → grounded answer + 7 native citations mapped to source chunks (TDD.md/GO-21.md), exit 0; abstain path previously verified
+
+## Milestone GO-21i — MCP server layer (expose RAG to AI agents)  — **PLAN-FIRST**
+
+> Turns the pipeline into a retrieval **tool** any MCP-capable agent (Claude Desktop, Claude Code, custom agents) can call — a third entrypoint over the same in-process services, mirroring the CLI (GO-21h) and HTTP API. Design before code. Plan: [`docs/superpowers/plans/2026-07-17-mcp-layer.md`](docs/superpowers/plans/2026-07-17-mcp-layer.md).
+
+- [ ] RAG-65 — **MCP layer — thorough design doc** (tool surface, service reuse, transport, auth, citation→MCP mapping, abstain semantics). Gates the build sub-tasks (RAG-65a…) decomposed from the plan once accepted.  · new capability, `add-adapter`-style seam
 
 ## Cross-cutting / NFR  (TDD §3)
 
@@ -94,7 +103,8 @@
 - [ ] RAG-47 — Pin deps / lockfile committed; clean commit history  · PRD §5
 - [~] RAG-50 — Keep `doc/codemap.md` current after every code change (ongoing)  · rule `coding-standards.md`, `codemap` skill
 - [~] RAG-51 — Append to `doc/LEARNINGS.md` after each build slice (ongoing)  · the revisit/teach log, distinct from ADRs
-- [ ] RAG-56 — Second `EmbeddingProvider` impl (OpenAI or local), env-selected — proves the swap seam  · PRD FR-2 acceptance, TDD §2.1, GO-21 quality bar, `add-adapter` skill (mind the dims trap)
+- [ ] RAG-56 — Second `EmbeddingProvider` impl, env-selected — proves the swap seam. **Preferred: an Ollama / OpenAI-compatible embeddings adapter** (`/v1/embeddings`), mirroring the generation-side `openai-compatible` provider — gives the local / private / no-key / no-rate-limit story Voyage can't (D3). ⚠️ **Dims trap:** schema is `VECTOR(1024)` (pinned to Voyage via `output_dimension`); a non-1024 local model (`nomic-embed-text` 768, `all-minilm` 384) is a migration + full re-ingest, not a drop-in — pick a 1024-dim model (`mxbai-embed-large`) for a clean config swap.  · PRD FR-2 acceptance, TDD §2.1, GO-21 quality bar, `add-adapter` + `db-migration` skills
+- [ ] RAG-63 — **Observability framework** — metrics (OpenTelemetry/Prometheus) + `GET /metrics`, request tracing with correlation IDs across ingest/retrieve/generate, error surfacing. Builds on the structured-logging baseline (RAG-42). **Hard gate before any UI (GO-21e).**  · TDD §3, NFR
 - [x] RAG-57 — Calibrate `MIN_SCORE` so out-of-corpus questions abstain  · D5 — floor 0.2 → 0.3, from measured score distributions (`eval/probe-scores.ts`); eval before → after: hit-rate 10/10 → 10/10, prec@5 0.42 → 0.43, abstain-rate 0/6 → **4/6**. Dataset seeded with 6 should-abstain entries + abstain-rate metric/gate (`EVAL_MIN_ABSTAIN_RATE`). Known residual: tech-adjacent junk + gibberish score ≈0.35–0.37, *above* the weakest legit question (0.33) — unfixable by a global floor; documented in README, left failing-honest in the eval set for answer-level grounding
 
 ## Wrap-up
