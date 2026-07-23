@@ -60,10 +60,12 @@
 ## Milestone GO-21e — Minimal chat UI  (PRD FR-5) — **DEFERRED** (see GO-21.md)
 
 > ⛔ **Gated on RAG-63 (observability framework):** no UI work starts until the observability framework lands — a user-facing surface without request tracing / metrics / error surfacing is not shippable here. UI itself is low-effort (the `/query` contract already returns `{answer, citations[], chunks[], citationsSupported}`); the gate is deliberate, not a size estimate.
+>
+> 🧭 **Sliced 2026-07-23** → [`subtasks/GO-21e.md`](subtasks/GO-21e.md) (RAG-31/32/33 re-cut into GO-21e-a…h). **Stack: React + Vite + TS; polish: full** (a deliberate revisit of the PRD "no UI polish" non-goal for the portfolio demo). Design guide: [`docs/ui-design-guide.md`](docs/ui-design-guide.md). Next actionable = GO-21e-b (scaffold `web/`), still behind the RAG-63 gate.
 
-- [ ] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7
-- [ ] RAG-32 — Render answer + clickable citations  · TDD §2.7
-- [ ] RAG-33 — Serve the static UI from Nest  · TDD §2.7
+- [ ] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-d)
+- [ ] RAG-32 — Render answer + clickable citations  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-f)
+- [ ] RAG-33 — Serve the static UI from Nest  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-g)
 
 ## Milestone GO-21f — Deploy to public URL  (PRD FR-7) — **DEFERRED** (see GO-21.md)
 
@@ -104,7 +106,7 @@
 - [~] RAG-50 — Keep `doc/codemap.md` current after every code change (ongoing)  · rule `coding-standards.md`, `codemap` skill
 - [~] RAG-51 — Append to `doc/LEARNINGS.md` after each build slice (ongoing)  · the revisit/teach log, distinct from ADRs
 - [ ] RAG-56 — Second `EmbeddingProvider` impl, env-selected — proves the swap seam. **Preferred: an Ollama / OpenAI-compatible embeddings adapter** (`/v1/embeddings`), mirroring the generation-side `openai-compatible` provider — gives the local / private / no-key / no-rate-limit story Voyage can't (D3). ⚠️ **Dims trap:** schema is `VECTOR(1024)` (pinned to Voyage via `output_dimension`); a non-1024 local model (`nomic-embed-text` 768, `all-minilm` 384) is a migration + full re-ingest, not a drop-in — pick a 1024-dim model (`mxbai-embed-large`) for a clean config swap.  · PRD FR-2 acceptance, TDD §2.1, GO-21 quality bar, `add-adapter` + `db-migration` skills
-- [ ] RAG-63 — **Observability framework** — metrics (OpenTelemetry/Prometheus) + `GET /metrics`, request tracing with correlation IDs across ingest/retrieve/generate, error surfacing. Builds on the structured-logging baseline (RAG-42). **Hard gate before any UI (GO-21e).**  · TDD §3, NFR
+- [ ] RAG-63 — **Observability framework** — metrics (OpenTelemetry/Prometheus) + `GET /metrics`, request tracing with correlation IDs across ingest/retrieve/generate, error surfacing. Builds on the structured-logging baseline (RAG-42). **Hard gate before any UI (GO-21e).**  · TDD §3, NFR → sliced 2026-07-23 (see subtasks/RAG-63.md: RAG-63a…h; **stack: thin** — `prom-client` /metrics + ALS correlation IDs + global exception filter). Approach note: docs/observability-guide.md. Next actionable = RAG-63b (not gated — landing RAG-63 unblocks GO-21e).
 - [x] RAG-57 — Calibrate `MIN_SCORE` so out-of-corpus questions abstain  · D5 — floor 0.2 → 0.3, from measured score distributions (`eval/probe-scores.ts`); eval before → after: hit-rate 10/10 → 10/10, prec@5 0.42 → 0.43, abstain-rate 0/6 → **4/6**. Dataset seeded with 6 should-abstain entries + abstain-rate metric/gate (`EVAL_MIN_ABSTAIN_RATE`). Known residual: tech-adjacent junk + gibberish score ≈0.35–0.37, *above* the weakest legit question (0.33) — unfixable by a global floor; documented in README, left failing-honest in the eval set for answer-level grounding
 
 ## Wrap-up
