@@ -31,6 +31,8 @@ services:
       - "3000:3000"
     volumes:
       - ./eval/sample-corpus:/app/eval/sample-corpus:ro
+      # Live-editable chat UI: edit web/public + restart the app, no rebuild.
+      - ./web/public:/app/web/public:ro
     depends_on:
       db:
         condition: service_healthy

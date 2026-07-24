@@ -11,10 +11,11 @@
 ## Files
 
 ### `src/main.ts`
-- **Purpose:** App entrypoint — bootstraps Nest, reads `PORT`, starts the HTTP server.
+- **Purpose:** App entrypoint — bootstraps Nest, serves the static chat UI (`useStaticAssets` → `../web/public`, same origin as `/query`), reads `PORT`, starts the HTTP server.
 - **Defines:** `bootstrap(): Promise<void>`
-- **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `Logger`
+- **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `NestExpressApplication` (`@nestjs/platform-express`), `join` (`path`), `Logger`
 - **Used by:** — (entrypoint; self-invoked via `void bootstrap()`)
+- **Serves:** `web/public/index.html` — single-page chat UI (vanilla, no build) that POSTs `/query` and renders the cited answer + a References panel; baked into the image (`Dockerfile COPY web/public`) and bind-mounted for live edits (`docker-compose.yml`).
 
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.

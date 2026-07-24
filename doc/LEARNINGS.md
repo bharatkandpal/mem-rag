@@ -301,3 +301,16 @@
 **Concept:** `.env.example` shipped `DATABASE_URL=...@db:5432` — correct inside the compose network, wrong for every host-side tool (CLI, eval harness), which all needed a manual override. The fix: compose already injects its own `DATABASE_URL` for the container, so `.env` now carries the *host* view (`localhost:5432`) and each runtime gets the URL that's true for its own network namespace.
 **Why it matters:** The quick start is part of the product — a README command that fails on first copy-paste costs more credibility than a missing feature. The same audit caught compose's `MIN_SCORE` fallback still at the pre-calibration 0.2: config duplicated across files drifts unless something forces a sweep.
 **Explain it in one line:** "The container and the host see different networks, so the env file carries the host's truth and compose injects the container's — and every README command got run before it got written."
+
+---
+
+## Wiring the chat UI onto the existing setup (GO-21e)
+
+### Serve the SPA from Nest — one origin, no build, no CORS
+**Concept:** The chat UI is a single `web/public/index.html` served by the app itself via `app.useStaticAssets(join(__dirname,'..','web','public'))` (needs `NestFactory.create<NestExpressApplication>`, already have `@nestjs/platform-express`). Same origin as `POST /query`, so `fetch('/query')` needs no CORS and the one-command `docker compose up` still yields a working UI at `/`. The distroless image bakes it in (`COPY web/public`), and a `:ro` bind-mount lets the HTML be edited + reloaded without a rebuild. No React/Vite toolchain was needed to satisfy "runs with the existing setup."
+**Why it matters:** The `/query` contract already returned everything the UI needs (`answer`, `citations[]`, `chunks[]`, `abstained`, `citationsSupported`); the UI is a thin renderer. Citations have a `citedText` source span + `documentIndex` but no answer offset, so the honest rendering is a **References panel** (per-citation source + quote, plus "Also retrieved" chunks), not fabricated inline markers.
+
+### The bug was auth, not code: recreate to re-read `.env`
+**Concept:** `/query` was 500-ing with Anthropic "Could not resolve authentication method" while Voyage embeddings + pgvector search worked fine — retrieval was healthy, only generation failed. The container had been up 7 days with an empty `ANTHROPIC_API_KEY`; `docker compose up -d --force-recreate app` made Compose re-interpolate `${ANTHROPIC_API_KEY:-}` from `.env` and citations flowed.
+**Why it matters:** A long-lived container silently holds the env it started with. When an LLM call fails auth, check the *running* container's environment before the code — and remember the layered read: retrieval green + generation red points straight at the generation provider's key.
+**Explain it in one line:** "The code was fine; the 7-day-old container just never got the key — recreating it re-read `.env`."

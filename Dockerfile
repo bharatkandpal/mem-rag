@@ -17,6 +17,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+# Static chat UI served by main.ts (useStaticAssets → ../web/public).
+COPY web/public ./web/public
 EXPOSE 3000
 # The distroless nodejs image's entrypoint is `node`; pass the script as its arg.
 CMD ["dist/main.js"]
