@@ -11,6 +11,14 @@ const SYSTEM_PROMPT =
   'If the documents do not contain the answer, say you do not have that information ' +
   'in the corpus — never answer from outside knowledge.';
 
+// Used only by the explicit, opt-in /query/general path — never the default
+// grounded flow. The answer is the model's own knowledge, not the corpus.
+const GENERAL_SYSTEM_PROMPT =
+  'Answer the question from your general knowledge. This response is explicitly ' +
+  'NOT drawn from the user document corpus — it is your own knowledge, offered ' +
+  'because the corpus did not contain the answer. Be accurate and concise, and ' +
+  'flag uncertainty rather than guessing.';
+
 /**
  * Default GenerationProvider (D4): Claude with native citations. Each chunk
  * becomes a `document` content block with `citations: {enabled: true}`; the
@@ -61,5 +69,21 @@ export class AnthropicGenerationProvider implements GenerationProvider {
       `generated answer over ${chunks.length} chunks with ${citations.length} citations`,
     );
     return { answer: answer.trim(), citations };
+  }
+
+  async generateGeneral(question: string): Promise<string> {
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: MAX_TOKENS,
+      system: GENERAL_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: question }],
+    });
+
+    let answer = '';
+    for (const block of response.content) {
+      if (block.type === 'text') answer += block.text;
+    }
+    this.logger.log('generated ungrounded general-knowledge answer (explicit opt-in, not from corpus)');
+    return answer.trim();
   }
 }

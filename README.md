@@ -96,12 +96,13 @@ http://localhost:3000
 
 Ask a question and you get the same grounded, cited answer the API returns — rendered with a **References panel** listing each cited source and its exact quoted passage — or an honest *"not in the corpus"* when nothing clears the score floor.
 
-**How it works.** The UI is a static `web/public/index.html` (vanilla JS, no framework) served by the NestJS app itself via `useStaticAssets` in [`src/main.ts`](src/main.ts). Because it's served by the app, it lives on the **same origin** as the API, so the browser just `fetch`es `POST /query` with no CORS and no second server to run. The page is a thin renderer over the existing `/query` contract (`{ answer, citations[], chunks[], abstained, citationsSupported }`):
+**How it works.** The UI is a static `web/public/index.html` (vanilla JS, no framework) served by the NestJS app itself via `useStaticAssets` in [`src/main.ts`](src/main.ts). Because it's served by the app, it lives on the **same origin** as the API, so the browser just `fetch`es `POST /query` with no CORS and no second server to run. The page is a thin renderer over the existing `/query` contract (`{ answer, citations[], chunks[], abstained, citationsSupported, grounded }`):
 
 - **Answer** — the model's markdown answer, formatted.
 - **References sidebar** — one card per citation (source file + the quoted `citedText` span it's grounded on), followed by any other retrieved chunks under *"Also retrieved"* with their similarity scores.
 - **Honest states** — a *grounded · N citations* badge; the abstain card; a *"provider can't cite"* note when a non-citing generation provider is configured (`citationsSupported: false`); and a network/error card.
-- **Session extras** — a left history panel for the current session, a light/dark theme toggle, and collapsible sidebars.
+- **Opt-in general knowledge** — on an abstain, an *"Answer from general knowledge →"* button calls the separate `POST /query/general` route and renders the result as an **amber, clearly-labelled non-corpus card** (`grounded: false`, no citations). The default `/query` abstain guarantee is untouched — this is an explicit, user-initiated escape hatch, never automatic (see [`ai-and-secrets.md`](.claude/rules/ai-and-secrets.md)).
+- **Session extras** — a left history panel for the current session (each entry deletable), a light/dark theme toggle, and collapsible sidebars.
 
 The UI is baked into the Docker image (`Dockerfile`) and bind-mounted in Compose, so edits to `web/public/index.html` appear on an app restart with **no rebuild**. It adds nothing to the pipeline — it's purely a browser client of the same HTTP API the CLI and eval harness already share.
 

@@ -78,6 +78,18 @@ describe('AnthropicGenerationProvider', () => {
     ]);
   });
 
+  it('generateGeneral sends no document blocks and returns plain ungrounded text', async () => {
+    create.mockResolvedValue({ content: [{ type: 'text', text: '  Paris is the capital.  ' }] });
+
+    const answer = await provider.generateGeneral('capital of France?');
+
+    const req = create.mock.calls[0][0];
+    // No corpus documents — the question is the whole user message.
+    expect(req.messages[0].content).toBe('capital of France?');
+    expect(JSON.stringify(req)).not.toContain('"type":"document"');
+    expect(answer).toBe('Paris is the capital.'); // trimmed, no citations returned
+  });
+
   it('defaults to claude-opus-4-8 unless a model is provided', async () => {
     create.mockResolvedValue({ content: [] });
     await provider.generate('q', [chunk()]);

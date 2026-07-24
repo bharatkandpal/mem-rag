@@ -12,6 +12,13 @@ export interface QueryResult {
   abstained: boolean;
   /** Whether the configured provider can verify citations (D4 update) — false for non-citation providers, never faked. */
   citationsSupported: boolean;
+  /**
+   * True for corpus-grounded answers (the product's default). False for the
+   * explicit opt-in general-knowledge answer served by `generateGeneral` — the
+   * UI colour-codes that as non-corpus. Abstentions are neither grounded nor an
+   * answer, so they report `false` too.
+   */
+  grounded: boolean;
 }
 
 /**
@@ -43,6 +50,7 @@ export class GenerationService {
         chunks: [],
         abstained: true,
         citationsSupported: this.provider.supportsCitations,
+        grounded: false,
       };
     }
 
@@ -57,6 +65,29 @@ export class GenerationService {
       chunks,
       abstained: false,
       citationsSupported: this.provider.supportsCitations,
+      grounded: true,
+    };
+  }
+
+  /**
+   * Explicit, opt-in general-knowledge answer (NOT from the corpus). Reached
+   * only via `POST /query/general` after the default `generate` has already
+   * abstained and the user has asked for it. Deliberately bypasses retrieval
+   * and grounding — `grounded: false`, no citations, no chunks — so the caller
+   * (and UI) must present it as non-corpus. The abstain-on-empty guarantee of
+   * the default path (D5) is untouched; this is the sanctioned exception, made
+   * visible rather than silent.
+   */
+  async generateGeneral(question: string): Promise<QueryResult> {
+    const answer = await this.provider.generateGeneral(question);
+    this.logger.log('served explicit ungrounded general-knowledge answer (opt-in, not from corpus)');
+    return {
+      answer,
+      citations: [],
+      chunks: [],
+      abstained: false,
+      citationsSupported: this.provider.supportsCitations,
+      grounded: false,
     };
   }
 }

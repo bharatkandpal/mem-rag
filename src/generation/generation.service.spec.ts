@@ -13,6 +13,7 @@ import { GenerationService } from './generation.service';
 describe('GenerationService', () => {
   let retrieve: jest.Mock;
   let generate: jest.Mock;
+  let generateGeneral: jest.Mock;
   let service: GenerationService;
 
   const chunk = (over: Partial<RetrievedChunk> = {}): RetrievedChunk => ({
@@ -25,7 +26,12 @@ describe('GenerationService', () => {
   const build = (supportsCitations = true) => {
     retrieve = jest.fn();
     generate = jest.fn();
-    const provider = { supportsCitations, generate } as unknown as GenerationProvider;
+    generateGeneral = jest.fn();
+    const provider = {
+      supportsCitations,
+      generate,
+      generateGeneral,
+    } as unknown as GenerationProvider;
     const retrieval = { retrieve } as unknown as RetrievalService;
     service = new GenerationService(provider, retrieval);
   };
@@ -72,5 +78,27 @@ describe('GenerationService', () => {
 
     expect(result.citationsSupported).toBe(false);
     expect(result.citations).toEqual([]);
+  });
+
+  it('marks corpus-grounded answers grounded=true', async () => {
+    retrieve.mockResolvedValue([chunk()]);
+    generate.mockResolvedValue({ answer: 'ok', citations: [] });
+
+    const result = await service.generate('q');
+
+    expect(result.grounded).toBe(true);
+    expect(result.abstained).toBe(false);
+  });
+
+  it('generateGeneral bypasses retrieval and returns an ungrounded answer (grounded=false, no citations)', async () => {
+    const result = await service.generateGeneral('what is the capital of France?');
+
+    expect(generateGeneral).toHaveBeenCalledWith('what is the capital of France?');
+    expect(retrieve).not.toHaveBeenCalled(); // must not touch the corpus
+    expect(generate).not.toHaveBeenCalled(); // must not use the grounded path
+    expect(result.grounded).toBe(false);
+    expect(result.abstained).toBe(false);
+    expect(result.citations).toEqual([]);
+    expect(result.chunks).toEqual([]);
   });
 });
