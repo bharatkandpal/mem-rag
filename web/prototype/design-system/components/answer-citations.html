@@ -1,0 +1,14 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="../styles.css"/><title>Answer with citations</title></head>
+<body><div class="preview">
+  <div class="pv-label">Grounded answer · inline citations + popover</div>
+  <div class="answer">Retrieval scores each chunk by <span class="cited">cosine similarity over an HNSW index<sup><button class="cite">1</button></sup></span>, then applies a <span class="cited">configurable min-score floor<sup><button class="cite lit">2</button></sup></span> so weak matches drop out. If none clear it, the system <span class="cited">abstains rather than answer ungrounded<sup><button class="cite">3</button></sup></span>.</div>
+  <div class="answer-meta"><span class="grounded">&#10003; grounded · 3 citations</span></div>
+  <div class="popover" style="margin-top:8px">
+    <div class="pv-src">TDD.md</div>
+    <div class="pv-quote">k and a min-score floor are config (RAG-22, MIN_SCORE).</div>
+  </div>
+</div></body></html>
