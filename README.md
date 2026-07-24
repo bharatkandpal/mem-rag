@@ -24,7 +24,7 @@ Same pipeline over HTTP: `POST /ingest {path}` · `POST /query {question}`. Full
 
 - **Docker + Docker Compose** — runs the app and pgvector (Postgres 16) with no local Postgres needed.
 - **Node.js 20+ and npm** — for the CLI, the eval harness, and tests. Only needed if you use those host-side tools; the API itself runs entirely in Docker.
-- **API keys** — a [Voyage](https://www.voyageai.com/) key for embeddings and an [Anthropic](https://console.anthropic.com/) key for generation. Both are required for the default providers.
+- **API keys** — a [Voyage](https://www.voyageai.com/) key for embeddings and an [Anthropic](https://console.anthropic.com/) key for generation. Both are required for the *default* providers. Embeddings can instead run fully local and keyless with `EMBEDDING_PROVIDER=transformers` (in-process transformers.js), leaving only the Anthropic key.
 
 ### 2. Configure environment
 
@@ -36,12 +36,12 @@ Open `.env` and fill in the two keys — everything else has a working default:
 
 | Variable | Required | Default | What it controls |
 |----------|----------|---------|------------------|
-| `VOYAGE_API_KEY` | **yes** | — | Voyage embeddings (ingest + query) |
+| `VOYAGE_API_KEY` | yes\* | — | Voyage embeddings (ingest + query). \*Not needed with `EMBEDDING_PROVIDER=transformers` (local, keyless) |
 | `ANTHROPIC_API_KEY` | **yes** | — | Claude generation with native citations |
 | `DATABASE_URL` | no | `postgresql://rag:rag@localhost:5432/rag` | Host-side tools (CLI, `npm run eval`) reach pgvector on localhost; the app inside Compose gets `db:5432` from the compose file |
-| `EMBEDDING_PROVIDER` / `VOYAGE_MODEL` | no | `voyage` / `voyage-4-lite` | Embedding adapter + model |
+| `EMBEDDING_PROVIDER` / `VOYAGE_MODEL` | no | `voyage` / `voyage-4-lite` | Embedding adapter + model. `EMBEDDING_PROVIDER=transformers` runs local, in-process, keyless embeddings (`EMBEDDING_MODEL`, default `Xenova/bge-large-en-v1.5`, 1024-dim) |
 | `GENERATION_PROVIDER` / `GENERATION_MODEL` | no | `anthropic` / `claude-opus-4-8` | Generation adapter + model (`openai-compatible` points at Ollama/vLLM for local generation — no native citations) |
-| `RETRIEVAL_K` / `MIN_SCORE` | no | `5` / `0.3` | Top-k and the similarity floor below which the system abstains |
+| `RETRIEVAL_K` / `MIN_SCORE` | no | `5` / `0.3` | Top-k and the similarity floor below which the system abstains. `MIN_SCORE` is model-specific — `0.3` for Voyage, `0.59` for bge-large (transformers) |
 | `CHUNK_TOKENS` / `OVERLAP_TOKENS` | no | `512` / `64` | Chunking budget (retrieval-affecting — re-run the eval if changed) |
 | `EVAL_MIN_HIT_RATE` / `EVAL_MIN_ABSTAIN_RATE` | no | `0.5` / `0.5` | Floors below which `npm run eval` exits non-zero |
 
@@ -147,6 +147,8 @@ Baseline (`eval/dataset.jsonl`: 10 answerable + 6 should-abstain questions, `voy
 (9 chunks, k=5 → ~0.4–0.6 is the structural precision ceiling; hit-rate is the headline at this corpus size.)
 
 Calibrating the floor 0.2 → 0.3 moved abstain-rate 0/6 → 4/6 with hit-rate unchanged. The two remaining leaks (tech-adjacent junk scoring ≈0.35, *above* the weakest real question at 0.33) are unfixable by a global similarity floor — they stay in the eval set as documented failures for answer-level grounding to catch. Any retrieval-affecting change must ship with before/after eval numbers; a pre-commit hook enforces it.
+
+**Swappable embeddings, measured (RAG-56).** The local `transformers` provider (`Xenova/bge-large-en-v1.5`, in-process, no key) holds the bar — re-ingesting the same corpus and re-running the eval gives hit-rate **10/10**, precision@5 **0.50**, abstain-rate **4/6** at its own calibrated floor `MIN_SCORE=0.59`. The floor differs from Voyage's `0.3` because min-score is an *absolute* cosine cutoff and each model has its own similarity scale — so the floor is calibrated per embedding model, never shared. Same two tech-adjacent leaks as Voyage; a global floor can't separate them on either model.
 
 ## Configuration
 

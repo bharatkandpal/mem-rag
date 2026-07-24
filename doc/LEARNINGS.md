@@ -301,3 +301,18 @@
 **Concept:** `.env.example` shipped `DATABASE_URL=...@db:5432` — correct inside the compose network, wrong for every host-side tool (CLI, eval harness), which all needed a manual override. The fix: compose already injects its own `DATABASE_URL` for the container, so `.env` now carries the *host* view (`localhost:5432`) and each runtime gets the URL that's true for its own network namespace.
 **Why it matters:** The quick start is part of the product — a README command that fails on first copy-paste costs more credibility than a missing feature. The same audit caught compose's `MIN_SCORE` fallback still at the pre-calibration 0.2: config duplicated across files drifts unless something forces a sweep.
 **Explain it in one line:** "The container and the host see different networks, so the env file carries the host's truth and compose injects the container's — and every README command got run before it got written."
+
+---
+
+## RAG-56 — Local transformers.js embeddings (the swap seam, exercised)
+
+### A min-score floor is calibrated per embedding model, not shared
+**Concept:** Swapping Voyage → local bge-large held hit-rate at 10/10, but abstain-rate collapsed 4/6 → 0/6 at the same `MIN_SCORE=0.3` — every out-of-corpus question, gibberish included, cleared the floor. This wasn't a retrieval bug: bge's cosine similarities sit on a *higher, compressed* scale (in-corpus 0.61–0.73, junk 0.43–0.63) than Voyage's. Re-probing the distribution and moving the floor to 0.59 restored abstain-rate to 4/6 and lifted precision@5 to 0.50.
+**Why it matters:** `MIN_SCORE` is an *absolute* cutoff, but a similarity score is only meaningful *within* one model's geometry — so the floor is a property of the (model, corpus) pair, not a portable constant. Treating it as shared is exactly how an embedding swap silently stops abstaining while every "quality" number still looks green. The abstain-rate metric + CI gate (RAG-57) is what caught it.
+**How I handled it:** re-ran `eval/probe-scores.ts` under the new provider for raw top-k scores, set the floor inside the (gibberish 0.583, weakest-legit 0.608) window, re-ran the eval to confirm, and documented both floors (0.3 Voyage / 0.59 bge) in `.env.example`, the README, and the codemap env table. Ran the whole experiment against an isolated `rag_bge` database so the live Voyage corpus was never overwritten.
+**Explain it in one line:** "Swap the embedding model and the abstain threshold moves with it — cosine floors don't transfer across models, so re-probe and re-calibrate every time, and let the abstain-rate gate prove it."
+
+### Keep a heavy, ESM-only dependency out of module load and out of tests
+**Concept:** `@huggingface/transformers` is ESM-only (this project is CommonJS) and fetches ~130 MB of ONNX weights on first use. Instead of importing it at module top-level, the provider takes an injectable `PipelineLoader` and `await import()`s the package lazily on the first `embed()` — the package ships a CJS node bundle, so require-of-ESM resolves cleanly under Node 22. Unit tests inject a fake loader and never touch the network or the real model.
+**Why it matters:** A top-level import would download weights the first time the DI graph boots (including under `jest`), couple the module to one runtime's ESM/CJS interop, and make the adapter untestable offline. The loader seam keeps boot cheap, tests hermetic, and the interop contained to a single function.
+**Explain it in one line:** "Inject the loader for a heavy/ESM-only dependency so its cost — download, native binary, interop — stays lazy and mockable, and the adapter stays unit-testable with no network and no weights."

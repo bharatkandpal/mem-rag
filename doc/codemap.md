@@ -135,7 +135,7 @@
 ### `src/embedding/embedding-provider.interface.ts`
 - **Purpose:** The embedding swap point (TDD §2.1) — ingestion/retrieval depend on this, never on a concrete provider.
 - **Defines:** `EmbeddingProvider` (interface: `dims`, `embed(texts)`) · `EMBEDDING_PROVIDER` (DI token, const)
-- **Used by:** `src/embedding/voyage-embedding.provider.ts` (implements) · `src/embedding/embedding.module.ts` (binds token)
+- **Used by:** `src/embedding/voyage-embedding.provider.ts` · `src/embedding/transformers-embedding.provider.ts` (both implement) · `src/embedding/embedding.module.ts` (binds token)
 
 ### `src/embedding/voyage-embedding.provider.ts`
 - **Purpose:** Default `EmbeddingProvider` impl — Voyage (default `voyage-4-lite`, env `VOYAGE_MODEL`), 1024 dims pinned via `output_dimension`, via REST (no SDK). All Voyage-specific code contained here.
@@ -143,11 +143,17 @@
 - **Depends on:** `EmbeddingProvider` (interface), `Logger`, global `fetch`; `VOYAGE_API_KEY` (ctor arg)
 - **Used by:** `src/embedding/embedding.module.ts` (factory)
 
+### `src/embedding/transformers-embedding.provider.ts`
+- **Purpose:** Local, in-process `EmbeddingProvider` impl (RAG-56) — transformers.js (`@huggingface/transformers`) feature-extraction, mean-pooled + L2-normalized. No server, no key, no rate limit; the free/self-hostable alternative to Voyage. Default model `Xenova/bge-large-en-v1.5` (1024 dims → matches `VECTOR(1024)`, no migration). Pipeline lazy-loaded once and cached; an injectable `PipelineLoader` keeps the heavy ESM package out of module load and out of unit tests.
+- **Defines:** `TransformersEmbeddingProvider` (class, `dims=1024`) · `TransformersEmbeddingProvider.embed(): Promise<number[][]>` · `FeatureExtractor` / `PipelineLoader` (types)
+- **Depends on:** `EmbeddingProvider` (interface), `Logger`, `@huggingface/transformers` (dynamic `import`); `EMBEDDING_MODEL` (ctor arg, optional)
+- **Used by:** `src/embedding/embedding.module.ts` (factory, `case 'transformers'`)
+
 ### `src/embedding/embedding.module.ts`
 - **Purpose:** Global module — binds `EMBEDDING_PROVIDER` token to the impl selected by `EMBEDDING_PROVIDER` env (factory, RAG-11).
-- **Defines:** `EmbeddingModule` (class, `@Global`) · provider factory (`useFactory` → selects `VoyageEmbeddingProvider`)
+- **Defines:** `EmbeddingModule` (class, `@Global`) · provider factory (`useFactory` → `EMBEDDING_PROVIDER`: `voyage` → `VoyageEmbeddingProvider` | `transformers` → `TransformersEmbeddingProvider`)
 - **Exports:** `EMBEDDING_PROVIDER`
-- **Depends on:** `ConfigService`, `VoyageEmbeddingProvider`
+- **Depends on:** `ConfigService`, `VoyageEmbeddingProvider`, `TransformersEmbeddingProvider`
 - **Used by:** `src/app.module.ts` (import); token injected by ingestion/retrieval in later milestones
 
 ### `src/database/database.module.ts`
@@ -197,9 +203,10 @@
 | `AppModule` | class | `src/app.module.ts` | `src/main.ts` |
 | `DatabaseModule` | class | `src/database/database.module.ts` | `src/app.module.ts` |
 | `PG_POOL` | DI token | `src/database/database.module.ts` | `src/health/health.controller.ts` |
-| `EmbeddingProvider` | interface | `src/embedding/embedding-provider.interface.ts` | voyage provider, embedding module (+ ingestion/retrieval later) |
+| `EmbeddingProvider` | interface | `src/embedding/embedding-provider.interface.ts` | voyage + transformers providers, embedding module, ingestion, retrieval |
 | `EMBEDDING_PROVIDER` | DI token | `src/embedding/embedding-provider.interface.ts` | `src/embedding/embedding.module.ts` |
 | `VoyageEmbeddingProvider` | class | `src/embedding/voyage-embedding.provider.ts` | `src/embedding/embedding.module.ts` |
+| `TransformersEmbeddingProvider` | class | `src/embedding/transformers-embedding.provider.ts` | `src/embedding/embedding.module.ts` |
 | `EmbeddingModule` | class | `src/embedding/embedding.module.ts` | `src/app.module.ts` |
 | `VectorStore` | interface | `src/vector-store/vector-store.interface.ts` | pgvector store, vector-store module (+ ingestion/retrieval later) |
 | `ChunkInput` | interface | `src/vector-store/vector-store.interface.ts` | `src/vector-store/pgvector.store.ts` (+ ingestion later) |
@@ -259,9 +266,10 @@
 | `GENERATION_API_KEY` | `src/generation/generation.module.ts` (factory, `openai-compatible` branch only) | — |
 | `VOYAGE_API_KEY` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider`) | — |
 | `VOYAGE_MODEL` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider` ctor) | voyage-4-lite |
-| `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage |
+| `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage (or transformers) |
+| `EMBEDDING_MODEL` | `src/embedding/embedding.module.ts` (→ `TransformersEmbeddingProvider` ctor) | Xenova/bge-large-en-v1.5 |
 | `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` · `eval/run-eval.ts` (table label) | 5 |
-| `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.3 (calibrated, RAG-57) |
+| `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.3 (Voyage, RAG-57); 0.59 for bge-large (RAG-56f) |
 | `CHUNK_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 512 |
 | `OVERLAP_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 64 |
 | `EVAL_MIN_HIT_RATE` | `eval/run-eval.ts` (CI gate: exit 1 below floor) | 0.5 |

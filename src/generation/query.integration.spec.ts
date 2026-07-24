@@ -27,9 +27,12 @@ import {
 describe('POST /query (integration)', () => {
   let app: INestApplication;
 
+  // Scores sit above any calibrated MIN_SCORE floor (Voyage 0.3, bge-large 0.59, …)
+  // so this in-corpus case stays green regardless of the configured provider /
+  // ambient .env MIN_SCORE; the abstain case below uses a score below every floor.
   const storedChunks: RetrievedChunk[] = [
-    { content: 'pgvector stores embeddings in Postgres.', source: 'TDD.md', score: 0.62 },
-    { content: 'HNSW is the index type.', source: 'TDD.md', score: 0.51 },
+    { content: 'pgvector stores embeddings in Postgres.', source: 'TDD.md', score: 0.92 },
+    { content: 'HNSW is the index type.', source: 'TDD.md', score: 0.81 },
   ];
 
   const embedder: EmbeddingProvider = {
