@@ -14,9 +14,10 @@ docker compose up --build -d                  # app + pgvector; schema applied o
 npm install && npm run build                  # once, for the CLI
 npx rag ingest ./docs                         # chunk → embed → store (idempotent)
 npx rag query "How is retrieval scored?"      # cited answer in the terminal
+# prefer a browser? the same stack already serves a chat UI at http://localhost:3000
 ```
 
-Same pipeline over HTTP: `POST /ingest {path}` · `POST /query {question}`. Full walkthrough, config, and troubleshooting below.
+Same pipeline over HTTP: `POST /ingest {path}` · `POST /query {question}`, or the browser chat UI at [`http://localhost:3000`](http://localhost:3000). Full walkthrough, config, and troubleshooting below.
 
 ## Detailed setup guide
 
@@ -59,7 +60,7 @@ This brings up two services: `db` (`pgvector/pgvector:pg16`, exposed on `localho
 curl -s localhost:3000/healthz   # {"status":"ok","db":true,"pgvector":true}
 ```
 
-`db: true` confirms the connection; `pgvector: true` confirms the extension loaded. Logs stream with `docker compose logs -f app`.
+`db: true` confirms the connection; `pgvector: true` confirms the extension loaded. Logs stream with `docker compose logs -f app`. The **browser chat UI is served on the same address** — open [`http://localhost:3000`](http://localhost:3000) (see [step 6](#6-chat-in-the-browser)).
 
 ### 4. Build the CLI (host-side tools)
 
@@ -85,7 +86,26 @@ curl -s localhost:3000/query  -H 'content-type: application/json' -d '{"question
 
 Ingestion is idempotent — re-running over unchanged files won't duplicate chunks.
 
-### 6. Verify retrieval quality (optional)
+### 6. Chat in the browser
+
+The stack **already serves a single-page chat UI** — no separate frontend server, no build step. Once the stack is up (step 3) and a corpus is ingested (step 5), open:
+
+```
+http://localhost:3000
+```
+
+Ask a question and you get the same grounded, cited answer the API returns — rendered with a **References panel** listing each cited source and its exact quoted passage — or an honest *"not in the corpus"* when nothing clears the score floor.
+
+**How it works.** The UI is a static `web/public/index.html` (vanilla JS, no framework) served by the NestJS app itself via `useStaticAssets` in [`src/main.ts`](src/main.ts). Because it's served by the app, it lives on the **same origin** as the API, so the browser just `fetch`es `POST /query` with no CORS and no second server to run. The page is a thin renderer over the existing `/query` contract (`{ answer, citations[], chunks[], abstained, citationsSupported }`):
+
+- **Answer** — the model's markdown answer, formatted.
+- **References sidebar** — one card per citation (source file + the quoted `citedText` span it's grounded on), followed by any other retrieved chunks under *"Also retrieved"* with their similarity scores.
+- **Honest states** — a *grounded · N citations* badge; the abstain card; a *"provider can't cite"* note when a non-citing generation provider is configured (`citationsSupported: false`); and a network/error card.
+- **Session extras** — a left history panel for the current session, a light/dark theme toggle, and collapsible sidebars.
+
+The UI is baked into the Docker image (`Dockerfile`) and bind-mounted in Compose, so edits to `web/public/index.html` appear on an app restart with **no rebuild**. It adds nothing to the pipeline — it's purely a browser client of the same HTTP API the CLI and eval harness already share.
+
+### 7. Verify retrieval quality (optional)
 
 ```bash
 npm run eval     # runs the eval harness; exits non-zero below the hit-rate / abstain-rate floors
@@ -120,7 +140,7 @@ flowchart LR
   end
 ```
 
-Two entrypoints (HTTP API, CLI) and the eval harness all drive the **same services in-process** — no duplicated pipeline logic.
+Two entrypoints (HTTP API, CLI) and the eval harness all drive the **same services in-process** — no duplicated pipeline logic. The browser chat UI (served by the app at `/`) sits on top of the HTTP API as a thin client, not a fourth pipeline.
 
 ## Key design decisions
 
