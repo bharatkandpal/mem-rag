@@ -1,0 +1,47 @@
+# Fully key-free local profile (RAG-67 slice). Overlays docker-compose.yml to run
+# the whole stack with NO API keys: local in-process transformers.js embeddings
+# (RAG-56) + local generation via Ollama through the OpenAI-compatible seam (RAG-60).
+#
+#   Run:
+#     OLLAMA_HOST=0.0.0.0:11434 ollama serve      # host Ollama, bound so the container can reach it
+#     ollama pull qwen2.5:7b                       # once
+#     docker compose -f docker-compose.yml -f docker-compose.local.yml up --build -d
+#
+# Ollama runs natively on the host (not containerized): Docker Desktop on Apple
+# Silicon has no GPU passthrough, so an in-container model would be CPU-only and slow.
+# The app reaches host Ollama at host.docker.internal (mapped below for Linux too).
+#
+# Trade-off (flag, don't bury): the OpenAI-compatible generation surface has no
+# native citations (citationsSupported:false) — grounded retrieval + abstain still
+# hold. For span-level citations use the default (Claude) stack: `docker compose up`.
+#
+# NOTE: switching an existing DB between the cloud (Voyage) and local (transformers)
+# profiles requires a re-ingest — the two embedders live in different vector spaces
+# (both 1024-dim, so no migration, but the vectors don't transfer). See README.
+services:
+  app:
+    environment:
+      # No keys — blanked to prove the local providers need none.
+      ANTHROPIC_API_KEY: ""
+      VOYAGE_API_KEY: ""
+      # Local, in-process embeddings — no key, no network at query time once cached.
+      EMBEDDING_PROVIDER: transformers
+      EMBEDDING_MODEL: Xenova/bge-large-en-v1.5
+      # bge-large's calibrated absolute-cosine floor (RAG-56) — NOT Voyage's 0.3.
+      MIN_SCORE: "0.59"
+      # Weight cache on a persistent, writable volume (node_modules is read-only).
+      TRANSFORMERS_CACHE: /hf-cache
+      # Local generation via host Ollama (OpenAI-compatible). No native citations here.
+      GENERATION_PROVIDER: openai-compatible
+      GENERATION_BASE_URL: http://host.docker.internal:11434/v1
+      GENERATION_MODEL: qwen2.5:7b
+      GENERATION_API_KEY: ""
+    # Makes host.docker.internal resolve on Linux too (automatic on Docker Desktop).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Persist the ~335MB weight download across container recreates.
+      - hfcache:/hf-cache
+
+volumes:
+  hfcache:
