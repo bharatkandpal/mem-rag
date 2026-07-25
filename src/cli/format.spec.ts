@@ -15,6 +15,7 @@ describe('formatQueryResult', () => {
     chunks: [],
     abstained: false,
     citationsSupported: true,
+    grounded: true,
   };
 
   it('prints the answer with a numbered citation list', () => {

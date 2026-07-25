@@ -103,6 +103,14 @@
 
 - [ ] RAG-66 — **`rag init` scaffolding generator — design + build**: target detection, the file set written, `RagModule.forRoot()` config surface, idempotent re-run, and the importable-package surface. **Slice before building** (`task-slice`).  · GO-21j, `cli` + `nest-module` skills → sliced (see subtasks/GO-21j.md)
 
+## Milestone GO-21k — Plug-and-play self-hosted bundle: `docker compose up`  (Integrator persona) — **lowest-effort self-host**
+
+> A batteries-included, **completely self-hosted default**: one `docker compose up` brings the whole stack online (app + pgvector + local model servers) with **no external API keys**, pre-seeded so a fresh boot answers a query out of the box. Ships RAG *as its own runnable appliance* — distinct from GO-21j (embed *into* a host) and GO-21f (deploy to a public URL). The low-effort counterpart to **RAG-64 (k8s/Helm IaC)** — that IaC track is a **separate, later discussion**.
+>
+> ⚠️ **Citation trade-off — flag, don't bury.** The key-free default runs generation through the OpenAI-compatible provider (RAG-60) against a local LLM → `supportsCitations=false` (rule `ai-and-secrets.md`). Grounded retrieval + abstain still hold, but native span-level citations are Claude-only. The bundle must surface this honestly and ship an opt-in **`cloud` compose profile** (Voyage + Anthropic) for the full-citation experience.
+
+- [ ] RAG-67 — **Plug-and-play self-hosted Docker bundle** — a `docker compose up` **default profile that is fully key-free**: local embeddings (RAG-56) + local generation via a bundled Ollama/OpenAI-compatible server (RAG-60), health-gated startup ordering, auto-applied `chunks`/HNSW schema, optional first-boot seed of `eval/sample-corpus` so `/query` works immediately; pinned image tags; an opt-in **`cloud` profile** (Voyage + Anthropic, native citations); README "Self-host in one command". **Depends on RAG-56** (key-free embeddings). **Slice before building** (`task-slice`).  · PRD FR-7, TDD §4, GO-21 quality bar  → to slice
+
 ## Cross-cutting / NFR  (TDD §3)
 
 - [x] RAG-42 — Structured logging baseline (pino or Nest logger)  · TDD §3 — Nest Logger with counts **and** latency (ms) on ingest, retrieve, and generate paths

@@ -37,6 +37,18 @@ export interface GenerationOutput {
 export interface GenerationProvider {
   readonly supportsCitations: boolean;
   generate(question: string, chunks: RetrievedChunk[]): Promise<GenerationOutput>;
+  /**
+   * Explicit, user-initiated ungrounded answer from the model's own knowledge —
+   * **not** drawn from the corpus and never cited. This is the *only* sanctioned
+   * exception to the grounding guarantee (D5, `ai-and-secrets.md`): the default
+   * `generate` path still abstains on empty retrieval, and this method is reached
+   * solely through the opt-in `/query/general` route after the user has seen an
+   * abstain and explicitly asked for general knowledge. The UI must label the
+   * result as non-corpus. Returns plain text — no `Citation`s, because there is
+   * no source to verify against (faking one here would be the same trust
+   * violation `supportsCitations` exists to prevent).
+   */
+  generateGeneral(question: string): Promise<string>;
 }
 
 /** DI token for the configured GenerationProvider (selected by GENERATION_PROVIDER). */

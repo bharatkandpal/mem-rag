@@ -54,6 +54,7 @@ describe('POST /query (integration)', () => {
         { citedText: 'pgvector stores embeddings in Postgres.', source: chunks[0].source, documentIndex: 0 },
       ],
     })),
+    generateGeneral: jest.fn(async () => 'Paris is the capital of France.'),
   };
 
   beforeAll(async () => {
@@ -117,5 +118,27 @@ describe('POST /query (integration)', () => {
       .post('/query')
       .send({ question: '   ' })
       .expect(400);
+  });
+
+  it('POST /query/general returns an ungrounded answer (no retrieval, grounded=false)', async () => {
+    (store.search as jest.Mock).mockClear();
+
+    const res = await request(app.getHttpServer())
+      .post('/query/general')
+      .send({ question: 'What is the capital of France?' })
+      .expect(201);
+
+    expect(res.body.answer).toBe('Paris is the capital of France.');
+    expect(res.body.grounded).toBe(false);
+    expect(res.body.abstained).toBe(false);
+    expect(res.body.citations).toEqual([]);
+    expect(res.body.chunks).toEqual([]);
+    // the opt-in general path must bypass retrieval entirely
+    expect(store.search).not.toHaveBeenCalled();
+    expect(provider.generateGeneral).toHaveBeenCalledWith('What is the capital of France?');
+  });
+
+  it('POST /query/general rejects an empty question with 400', async () => {
+    await request(app.getHttpServer()).post('/query/general').send({}).expect(400);
   });
 });

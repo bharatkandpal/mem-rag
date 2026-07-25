@@ -316,3 +316,25 @@
 **Concept:** `@huggingface/transformers` is ESM-only (this project is CommonJS) and fetches ~130 MB of ONNX weights on first use. Instead of importing it at module top-level, the provider takes an injectable `PipelineLoader` and `await import()`s the package lazily on the first `embed()` — the package ships a CJS node bundle, so require-of-ESM resolves cleanly under Node 22. Unit tests inject a fake loader and never touch the network or the real model.
 **Why it matters:** A top-level import would download weights the first time the DI graph boots (including under `jest`), couple the module to one runtime's ESM/CJS interop, and make the adapter untestable offline. The loader seam keeps boot cheap, tests hermetic, and the interop contained to a single function.
 **Explain it in one line:** "Inject the loader for a heavy/ESM-only dependency so its cost — download, native binary, interop — stays lazy and mockable, and the adapter stays unit-testable with no network and no weights."
+
+---
+
+## Wiring the chat UI onto the existing setup (GO-21e)
+
+### Serve the SPA from Nest — one origin, no build, no CORS
+**Concept:** The chat UI is a single `web/public/index.html` served by the app itself via `app.useStaticAssets(join(__dirname,'..','web','public'))` (needs `NestFactory.create<NestExpressApplication>`, already have `@nestjs/platform-express`). Same origin as `POST /query`, so `fetch('/query')` needs no CORS and the one-command `docker compose up` still yields a working UI at `/`. The distroless image bakes it in (`COPY web/public`), and a `:ro` bind-mount lets the HTML be edited + reloaded without a rebuild. No React/Vite toolchain was needed to satisfy "runs with the existing setup."
+**Why it matters:** The `/query` contract already returned everything the UI needs (`answer`, `citations[]`, `chunks[]`, `abstained`, `citationsSupported`); the UI is a thin renderer. Citations have a `citedText` source span + `documentIndex` but no answer offset, so the honest rendering is a **References panel** (per-citation source + quote, plus "Also retrieved" chunks), not fabricated inline markers.
+
+### The bug was auth, not code: recreate to re-read `.env`
+**Concept:** `/query` was 500-ing with Anthropic "Could not resolve authentication method" while Voyage embeddings + pgvector search worked fine — retrieval was healthy, only generation failed. The container had been up 7 days with an empty `ANTHROPIC_API_KEY`; `docker compose up -d --force-recreate app` made Compose re-interpolate `${ANTHROPIC_API_KEY:-}` from `.env` and citations flowed.
+**Why it matters:** A long-lived container silently holds the env it started with. When an LLM call fails auth, check the *running* container's environment before the code — and remember the layered read: retrieval green + generation red points straight at the generation provider's key.
+**Explain it in one line:** "The code was fine; the 7-day-old container just never got the key — recreating it re-read `.env`."
+
+---
+
+## An opt-in escape hatch for the grounding guarantee (UI + `/query/general`)
+
+### Honour "give me a general answer" without weakening abstain — make the exception explicit, not silent
+**Concept:** The product rule is *abstain on empty retrieval, never free-generate* (D5, `ai-and-secrets.md`) — "grounding is the whole product." A UI ask for "answer it from general knowledge anyway" is in direct tension with that. Resolved by keeping the default `GenerationService.generate` / `POST /query` abstain **completely untouched** and adding a **separate, user-initiated** path: a new `generateGeneral` on the `GenerationProvider` seam (so the model SDK is still only ever touched behind the adapter), a `GenerationService.generateGeneral` that bypasses retrieval entirely, and a distinct `POST /query/general` route. The result carries a new `grounded: boolean` on `QueryResult`; the UI renders `grounded:false` as an amber, clearly-labelled "general knowledge · not from your corpus" card, reachable only via a button that appears *after* an abstain.
+**Why it matters:** A binding rule that says "the whole product" isn't a reason to refuse a legitimate product need — it's a constraint on *how* you satisfy it. The escape hatch is defensible precisely because it's explicit (its own route + method), opt-in (never automatic), and visible (colour-coded, no citations, `grounded:false`) — the opposite of the silent free-generation the rule forbids. The rule doc was updated in the same change so code and rule can't drift.
+**Explain it in one line:** "Grounding stays the default and the guarantee; the ungrounded answer is a separate, labelled, opt-in door — not a hole in the wall."

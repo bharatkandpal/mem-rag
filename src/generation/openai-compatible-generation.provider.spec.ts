@@ -84,6 +84,20 @@ describe('OpenAICompatibleGenerationProvider', () => {
     expect(result.answer).toBe('ok');
   });
 
+  it('generateGeneral sends the question alone (no inlined context) and returns trimmed text', async () => {
+    fetchMock.mockResolvedValue(okResponse('  Paris.  '));
+    const provider = new OpenAICompatibleGenerationProvider('http://localhost:11434/v1', 'model');
+
+    const answer = await provider.generateGeneral('capital of France?');
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0].role).toBe('system');
+    expect(body.messages[1].content).toBe('capital of France?'); // no "Context:" wrapper
+    expect(body.messages[1].content).not.toContain('Context:');
+    expect(answer).toBe('Paris.');
+  });
+
   it('throws on a non-ok response without leaking the key', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 401, statusText: 'Unauthorized' });
     const provider = new OpenAICompatibleGenerationProvider(

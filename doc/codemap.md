@@ -11,10 +11,11 @@
 ## Files
 
 ### `src/main.ts`
-- **Purpose:** App entrypoint — bootstraps Nest, reads `PORT`, starts the HTTP server.
+- **Purpose:** App entrypoint — bootstraps Nest, serves the static chat UI (`useStaticAssets` → `../web/public`, same origin as `/query`), reads `PORT`, starts the HTTP server.
 - **Defines:** `bootstrap(): Promise<void>`
-- **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `Logger`
+- **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `NestExpressApplication` (`@nestjs/platform-express`), `join` (`path`), `Logger`
 - **Used by:** — (entrypoint; self-invoked via `void bootstrap()`)
+- **Serves:** `web/public/index.html` — single-page chat UI (vanilla, no build) that POSTs `/query` and renders the cited answer + a References panel; baked into the image (`Dockerfile COPY web/public`) and bind-mounted for live edits (`docker-compose.yml`).
 
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
@@ -36,30 +37,30 @@
 
 ### `src/generation/generation-provider.interface.ts`
 - **Purpose:** The generation swap point (TDD §2.5, D4 update) — mirrors `EmbeddingProvider`/`VectorStore`. Abstain-on-empty (D5) stays in `GenerationService`, one layer above; a provider only ever produces one grounded answer from a non-empty chunk list. `supportsCitations` is an honest capability flag — a provider without native citations returns `[]`, never a fabricated imitation.
-- **Defines:** `GenerationProvider` (interface: `supportsCitations`, `generate(question, chunks)`) · `GenerationOutput` (interface) · `Citation` (interface) · `GENERATION_PROVIDER` (DI token, const)
+- **Defines:** `GenerationProvider` (interface: `supportsCitations`, `generate(question, chunks)`, `generateGeneral(question)` — explicit opt-in ungrounded answer, not corpus, never cited) · `GenerationOutput` (interface) · `Citation` (interface) · `GENERATION_PROVIDER` (DI token, const)
 - **Used by:** `src/generation/anthropic-generation.provider.ts` (implements) · `src/generation/openai-compatible-generation.provider.ts` (implements) · `src/generation/generation.service.ts` · `src/generation/generation.module.ts` (binds token)
 
 ### `src/generation/anthropic-generation.provider.ts`
 - **Purpose:** Default `GenerationProvider` impl (D4) — Claude via native citations. Each chunk becomes a `document` content block with `citations: {enabled: true}`; response citations map back to `chunks[document_index]`. `supportsCitations = true`.
-- **Defines:** `AnthropicGenerationProvider` (class) · `AnthropicGenerationProvider.generate(): Promise<GenerationOutput>`
+- **Defines:** `AnthropicGenerationProvider` (class) · `AnthropicGenerationProvider.generate(): Promise<GenerationOutput>` · `.generateGeneral(question): Promise<string>` (ungrounded, no document blocks)
 - **Depends on:** `GenerationProvider`/`Citation`/`GenerationOutput` (interface), `Anthropic` (ctor arg), `ConfigService` (`GENERATION_MODEL`, via the module factory)
 - **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=anthropic`, the default)
 
 ### `src/generation/openai-compatible-generation.provider.ts`
 - **Purpose:** Proves the generation seam (add-adapter skill) — any OpenAI-compatible chat-completions endpoint (OpenAI itself, or a self-hosted local server: Ollama, LM Studio, vLLM) via REST (no SDK). No native citations on this surface: `supportsCitations = false`, citations always `[]`. Chunks are inlined as numbered context in the user message.
-- **Defines:** `OpenAICompatibleGenerationProvider` (class) · `OpenAICompatibleGenerationProvider.generate(): Promise<GenerationOutput>`
+- **Defines:** `OpenAICompatibleGenerationProvider` (class) · `OpenAICompatibleGenerationProvider.generate(): Promise<GenerationOutput>` · `.generateGeneral(question): Promise<string>` · private `.chat(messages): Promise<string>` (shared POST to `/chat/completions`)
 - **Depends on:** `GenerationProvider`/`GenerationOutput` (interface), `Logger`, global `fetch`; `baseUrl`/`model`/`apiKey` (ctor args)
 - **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=openai-compatible`)
 
 ### `src/generation/generation.service.ts`
 - **Purpose:** Generation orchestration (RAG-25-30, D4) — retrieve → abstain-on-empty (D5, provider-agnostic policy) → delegate to the configured `GenerationProvider` for the model call.
-- **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `QueryResult` (interface, incl. `citationsSupported`)
+- **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `.generateGeneral(question): Promise<QueryResult>` (opt-in ungrounded; bypasses retrieval; `grounded:false`) · `QueryResult` (interface, incl. `citationsSupported`, `grounded`)
 - **Depends on:** `GENERATION_PROVIDER` (injected `GenerationProvider`), `RetrievalService`
 - **Used by:** `src/generation/generation.controller.ts`, `src/generation/generation.module.ts`
 
 ### `src/generation/generation.controller.ts`
-- **Purpose:** `POST /query { question }` (RAG-29) — validates input, delegates to the service.
-- **Defines:** `GenerationController` (class) · `GenerationController.query(body): Promise<QueryResult>`
+- **Purpose:** `POST /query { question }` (RAG-29) grounded, and `POST /query/general { question }` (opt-in ungrounded) — validate input, delegate to the service.
+- **Defines:** `GenerationController` (class) · `.query(body): Promise<QueryResult>` · `.general(body): Promise<QueryResult>` · module-private `requireQuestion(body): string` (shared validation)
 - **Depends on:** `GenerationService`
 - **Used by:** `src/generation/generation.module.ts` (controller); route consumed by clients/UI
 
@@ -252,6 +253,7 @@
 | GET | `/healthz` | `HealthController.check` | `src/health/health.controller.ts` |
 | POST | `/ingest` | `IngestionController.ingest` | `src/ingestion/ingestion.controller.ts` |
 | POST | `/query` | `GenerationController.query` | `src/generation/generation.controller.ts` |
+| POST | `/query/general` | `GenerationController.general` | `src/generation/generation.controller.ts` |
 
 ## Env vars → read in
 
