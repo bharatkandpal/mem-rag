@@ -19,6 +19,28 @@ npx rag query "How is retrieval scored?"      # cited answer in the terminal
 
 Same pipeline over HTTP: `POST /ingest {path}` · `POST /query {question}`, or the browser chat UI at [`http://localhost:3000`](http://localhost:3000). Full walkthrough, config, and troubleshooting below.
 
+## Run fully key-free (self-hosted, no API keys)
+
+The default stack needs a Voyage key (embeddings) and an Anthropic key (generation). To run the **whole pipeline locally with no keys**, overlay [`docker-compose.local.yml`](docker-compose.local.yml): it swaps in local, in-process `transformers.js` embeddings (RAG-56) and local generation via [Ollama](https://ollama.com/) through the OpenAI-compatible seam (RAG-60).
+
+```bash
+# 1. Host Ollama, bound so the container can reach it, with a small model pulled
+OLLAMA_HOST=0.0.0.0:11434 ollama serve &
+ollama pull qwen2.5:7b
+# 2. Bring up the key-free stack (transformers embeddings + Ollama generation, no keys)
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build -d
+# 3. Ingest + query — no keys anywhere
+curl -s localhost:3000/ingest -H 'content-type: application/json' -d '{"path":"eval/sample-corpus"}'
+curl -s localhost:3000/query  -H 'content-type: application/json' -d '{"question":"What vector index does this project use?"}'
+```
+
+- **Ollama runs on the host, not in a container** — Docker Desktop on Apple Silicon has no GPU passthrough, so an in-container model would be CPU-only and slow. The app reaches it at `host.docker.internal:11434` (mapped for Linux via `extra_hosts`).
+- **The one honest trade-off:** the OpenAI-compatible generation surface has **no native citations** (`citationsSupported: false`) — grounded retrieval and the abstain guarantee still hold, but span-level citations are Claude-only. For those, use the default `docker compose up`.
+- **Switching an existing DB between the keyed (Voyage) and key-free (transformers) profiles needs a re-ingest** — the two embedders occupy different vector spaces (both 1024-dim, so no schema migration, but the vectors don't transfer). `MIN_SCORE` is model-specific too (`0.3` Voyage → `0.59` bge-large); the override sets it for you.
+- First query downloads the embedding weights (~335MB) into a persistent `hfcache` volume. Retrieval quality is unchanged from the keyed run — the eval gate passes at **hit-rate 10/10**, abstain-rate **4/6** ([RAG-56](#retrieval-quality--the-eval-gate)).
+
+This is a slice of the full [RAG-67](tasks.md) plug-and-play bundle; a single-command bundled-Ollama profile with first-boot seeding is the remaining work.
+
 ## Detailed setup guide
 
 ### 1. Prerequisites

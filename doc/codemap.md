@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** RAG-57 floor calibration — `MIN_SCORE` default 0.2 → 0.3; eval harness gains should-abstain entries (`relevant_doc_ids: []`), `computeAbstain`, an abstain-rate summary + gate (`EVAL_MIN_ABSTAIN_RATE`), and `eval/probe-scores.ts` (ad-hoc score-distribution probe). Prior: `rag` CLI (GO-21h, RAG-52-54) — `src/cli/main.ts` + `src/cli/format.ts`, services in-process, no HTTP.
+> **Last updated:** RAG-67 key-free local slice — `TransformersEmbeddingProvider.defaultLoader` honours `TRANSFORMERS_CACHE` (relocatable weight cache off the read-only `node_modules` path); Dockerfile pre-creates a nonroot-owned `/hf-cache` + sets `TRANSFORMERS_CACHE`; new `docker-compose.local.yml` overlay runs the stack key-free (transformers embeddings + Ollama generation). Prior: RAG-57 floor calibration — `MIN_SCORE` default 0.2 → 0.3; eval harness gains should-abstain entries (`relevant_doc_ids: []`), `computeAbstain`, an abstain-rate summary + gate (`EVAL_MIN_ABSTAIN_RATE`), and `eval/probe-scores.ts` (ad-hoc score-distribution probe).
 
 ---
 
@@ -145,9 +145,9 @@
 - **Used by:** `src/embedding/embedding.module.ts` (factory)
 
 ### `src/embedding/transformers-embedding.provider.ts`
-- **Purpose:** Local, in-process `EmbeddingProvider` impl (RAG-56) — transformers.js (`@huggingface/transformers`) feature-extraction, mean-pooled + L2-normalized. No server, no key, no rate limit; the free/self-hostable alternative to Voyage. Default model `Xenova/bge-large-en-v1.5` (1024 dims → matches `VECTOR(1024)`, no migration). Pipeline lazy-loaded once and cached; an injectable `PipelineLoader` keeps the heavy ESM package out of module load and out of unit tests.
+- **Purpose:** Local, in-process `EmbeddingProvider` impl (RAG-56) — transformers.js (`@huggingface/transformers`) feature-extraction, mean-pooled + L2-normalized. No server, no key, no rate limit; the free/self-hostable alternative to Voyage. Default model `Xenova/bge-large-en-v1.5` (1024 dims → matches `VECTOR(1024)`, no migration). Pipeline lazy-loaded once and cached; an injectable `PipelineLoader` keeps the heavy ESM package out of module load and out of unit tests. `defaultLoader` honours `TRANSFORMERS_CACHE` (→ `env.cacheDir`) so the weight cache can move off the read-only `node_modules` path in the distroless container (RAG-67 key-free run).
 - **Defines:** `TransformersEmbeddingProvider` (class, `dims=1024`) · `TransformersEmbeddingProvider.embed(): Promise<number[][]>` · `FeatureExtractor` / `PipelineLoader` (types)
-- **Depends on:** `EmbeddingProvider` (interface), `Logger`, `@huggingface/transformers` (dynamic `import`); `EMBEDDING_MODEL` (ctor arg, optional)
+- **Depends on:** `EmbeddingProvider` (interface), `Logger`, `@huggingface/transformers` (dynamic `import`); `EMBEDDING_MODEL` (ctor arg, optional); `TRANSFORMERS_CACHE` (env, optional)
 - **Used by:** `src/embedding/embedding.module.ts` (factory, `case 'transformers'`)
 
 ### `src/embedding/embedding.module.ts`
@@ -270,6 +270,7 @@
 | `VOYAGE_MODEL` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider` ctor) | voyage-4-lite |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage (or transformers) |
 | `EMBEDDING_MODEL` | `src/embedding/embedding.module.ts` (→ `TransformersEmbeddingProvider` ctor) | Xenova/bge-large-en-v1.5 |
+| `TRANSFORMERS_CACHE` | `src/embedding/transformers-embedding.provider.ts` (`defaultLoader` → `env.cacheDir`, when set) | transformers.js default (node_modules); Dockerfile sets `/hf-cache` |
 | `RETRIEVAL_K` | `src/retrieval/retrieval.service.ts` · `eval/run-eval.ts` (table label) | 5 |
 | `MIN_SCORE` | `src/retrieval/retrieval.service.ts` | 0.3 (Voyage, RAG-57); 0.59 for bge-large (RAG-56f) |
 | `CHUNK_TOKENS` | `src/ingestion/ingestion.service.ts` (default in `DEFAULT_CHUNK_OPTIONS`) | 512 |

@@ -1,0 +1,16 @@
+{"question": "What embedding model does this project use by default?", "expected": "answerable", "relevant_doc_ids": ["TDD.md"]}
+{"question": "What vector index type is used for similarity search?", "expected": "answerable", "relevant_doc_ids": ["TDD.md"]}
+{"question": "How many dimensions do the embedding vectors stored in pgvector have?", "expected": "answerable", "relevant_doc_ids": ["TDD.md"]}
+{"question": "What database table stores document chunks and their embeddings?", "expected": "answerable", "relevant_doc_ids": ["TDD.md"]}
+{"question": "Which Claude model is used for answer generation?", "expected": "answerable", "relevant_doc_ids": ["TDD.md", "PRD.md"]}
+{"question": "What happens when retrieval finds no chunks above the score floor?", "expected": "answerable", "relevant_doc_ids": ["TDD.md"]}
+{"question": "What are the functional requirements of the system?", "expected": "answerable", "relevant_doc_ids": ["PRD.md"]}
+{"question": "How do I run the project locally?", "expected": "answerable", "relevant_doc_ids": ["README.md"]}
+{"question": "What are the build milestones and their order?", "expected": "answerable", "relevant_doc_ids": ["GO-21.md"]}
+{"question": "What is the purpose of the swappable embedding adapter?", "expected": "answerable", "relevant_doc_ids": ["TDD.md", "PRD.md"]}
+{"question": "What is the capital of France?", "expected": "abstain"}
+{"question": "How do I bake sourdough bread?", "expected": "abstain"}
+{"question": "Who won the 2022 FIFA World Cup?", "expected": "abstain"}
+{"question": "How do I configure a Kubernetes ingress controller?", "expected": "abstain"}
+{"question": "What does the useEffect hook do in React?", "expected": "abstain"}
+{"question": "zxqvw blorptang frimble?", "expected": "abstain"}

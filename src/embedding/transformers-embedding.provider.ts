@@ -25,7 +25,13 @@ const MODEL_DIMS = 1024;
  * and never pull the heavy runtime or download weights.
  */
 const defaultLoader: PipelineLoader = async (model) => {
-  const { pipeline } = await import('@huggingface/transformers');
+  const { env, pipeline } = await import('@huggingface/transformers');
+  // Relocate the on-disk weight cache when TRANSFORMERS_CACHE is set. Its default
+  // lives under node_modules, which is read-only for the nonroot user in the
+  // distroless container — so the key-free container run (docker-compose.local.yml)
+  // points this at a writable, mounted volume. Unset (host/dev) keeps the default.
+  const cacheDir = process.env.TRANSFORMERS_CACHE;
+  if (cacheDir) env.cacheDir = cacheDir;
   // `dtype: 'q8'` picks the quantized weights: smaller download, faster CPU
   // inference. Quality lever — retrieval quality is measured by the eval (RAG-56e).
   const extractor = await pipeline('feature-extraction', model, { dtype: 'q8' });
