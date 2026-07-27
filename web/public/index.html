@@ -91,6 +91,10 @@
   .role .dot{width:14px;height:14px;border-radius:5px;background:linear-gradient(135deg,var(--accent),var(--accent-hover))}
   .bubble{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:14px 16px; box-shadow:var(--shadow-sm)}
   .msg-user .bubble{background:var(--surface-2)}
+  /* Assistant answers are selectable: click one to load its references (below). */
+  .msg-assistant .bubble{transition:border-color .18s var(--ease), box-shadow .18s var(--ease)}
+  .msg-assistant .bubble:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+  .msg-assistant.ref-active .bubble{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle)}
   .answer{max-width:68ch}
   .answer h3{font-size:1.15rem; margin:14px 0 6px} .answer h4{font-size:1rem; margin:12px 0 6px}
   .answer p{margin:8px 0} .answer ul{margin:8px 0; padding-left:20px} .answer li{margin:3px 0}
@@ -134,8 +138,14 @@
   .ref-top{display:flex; align-items:center; gap:8px; margin-bottom:7px}
   .ref-num{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:var(--accent); width:18px; height:18px; border-radius:5px; display:grid; place-items:center; flex:none}
   .ref-src{font-family:var(--mono); font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ref-top .ref-src{flex:1; min-width:0}
+  /* Passage-count pill when one document contributed more than one reference. */
+  .ref-badge{flex:none; font-family:var(--mono); font-size:10px; font-weight:600; color:var(--text-secondary);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:1px 7px; white-space:nowrap}
   .ref-quote{font-size:12.5px; line-height:1.5; color:var(--text-secondary); white-space:pre-wrap;
     display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden}
+  /* Multiple passages from the same document stack under one card, lightly divided. */
+  .ref-item .ref-quote + .ref-quote{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border)}
   .ref-divider{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:16px 0 10px}
   .chunk{border:1px dashed var(--border); border-radius:var(--r-md); padding:10px 12px; margin-bottom:10px; opacity:.9}
   .chunk-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px}
@@ -295,7 +305,17 @@
     thread.appendChild(msg);
     const gb=msg.querySelector('[data-general]');
     if(gb) gb.addEventListener('click',()=>askGeneral(gb, question||lastQuestion));
-    setReferences(r); updateBadge(r); scrollDown();
+    // A thread can hold several answers; clicking a response loads ITS references
+    // into the panel (ignored when the click is a text selection). Newest is focused.
+    msg.addEventListener('click',()=>{ if(window.getSelection && !window.getSelection().isCollapsed) return; focusReferences(msg, r); });
+    focusReferences(msg, r); scrollDown();
+  }
+
+  // Highlight the picked response and load its references + badge into the panel.
+  function focusReferences(msg, r){
+    thread.querySelectorAll('.msg-assistant.ref-active').forEach(m=>m.classList.remove('ref-active'));
+    msg.classList.add('ref-active');
+    setReferences(r); updateBadge(r);
   }
 
   // Explicit opt-in: fetch an ungrounded general-knowledge answer for a question
@@ -326,23 +346,48 @@
     if(r.abstained){ refCount.textContent='0'; refList.innerHTML=refEmpty('No sources — the answer isn’t in the corpus.'); return; }
     if(r.grounded===false){ refCount.textContent='0'; refList.innerHTML=refEmpty('Answered from the model’s general knowledge — no corpus sources.'); return; }
     if(cites.length){
-      refCount.textContent=cites.length;
-      let html=cites.map((c,i)=>`<div class="ref-item enter" style="animation-delay:${i*60}ms">
-        <div class="ref-top"><span class="ref-num">${i+1}</span><span class="ref-src">${escapeHtml(c.source)}</span></div>
-        <div class="ref-quote">${escapeHtml((c.citedText||'').trim())}</div></div>`).join('');
+      // Converge cited spans onto their source document — one card per document,
+      // its passages nested beneath, so a document never repeats as N cards.
+      const groups=groupBySource(cites);
+      refCount.textContent=groups.length;
+      let html=groups.map(([src,items],i)=>{
+        const quotes=items.map(c=>`<div class="ref-quote">${escapeHtml((c.citedText||'').trim())}</div>`).join('');
+        const badge=items.length>1?`<span class="ref-badge">${items.length} passages</span>`:'';
+        return `<div class="ref-item enter" style="animation-delay:${i*60}ms">
+          <div class="ref-top"><span class="ref-num">${i+1}</span><span class="ref-src">${escapeHtml(src)}</span>${badge}</div>
+          ${quotes}</div>`;
+      }).join('');
       const cited=new Set(cites.map(c=>c.documentIndex));
-      const extra=chunks.map((c,idx)=>({c,idx})).filter(x=>!cited.has(x.idx));
-      if(extra.length) html+=`<div class="ref-divider">Also retrieved</div>`+extra.map(({c})=>chunkCard(c)).join('');
+      const extra=chunks.filter((c,idx)=>!cited.has(idx));
+      if(extra.length) html+=`<div class="ref-divider">Also retrieved</div>`+groupedChunks(extra);
       refList.innerHTML=html;
     } else {
-      refCount.textContent=chunks.length;
+      // No native citations (e.g. a local generation provider) — show the retrieved
+      // context, likewise converged to one card per source document.
+      const groups=groupBySource(chunks);
+      refCount.textContent=groups.length;
       refList.innerHTML=(r.citationsSupported===false?`<div class="capability-note" style="margin:0 0 12px">ⓘ provider can’t cite — showing retrieved context</div>`:'')
-        + (chunks.length?chunks.map(chunkCard).join(''):refEmpty('No retrieved context.'));
+        + (chunks.length?groupedChunks(chunks):refEmpty('No retrieved context.'));
     }
     requestAnimationFrame(()=>refList.querySelectorAll('.bar > i').forEach(b=>b.style.width=b.dataset.w+'%'));
   }
   const refEmpty=msg=>`<div class="ref-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><div>${msg}</div></div>`;
-  const chunkCard=c=>`<div class="chunk"><div class="chunk-head"><span class="chunk-src">${escapeHtml(c.source)}</span><span class="chunk-score">${(c.score||0).toFixed(2)}</span></div><div class="bar"><i data-w="${Math.round((c.score||0)*100)}"></i></div></div>`;
+  // Group citations or chunks by their source document, preserving first-seen order.
+  function groupBySource(items){
+    const m=new Map();
+    for(const it of items){ const k=it.source||'—'; if(!m.has(k)) m.set(k,[]); m.get(k).push(it); }
+    return [...m.entries()];
+  }
+  // One card per source document: filename (+ passage count) and its best score —
+  // instead of a separate score card per retrieved chunk.
+  function groupedChunks(items){
+    return groupBySource(items).map(([src,list])=>{
+      const top=Math.max(...list.map(c=>c.score||0));
+      const label=escapeHtml(src)+(list.length>1?` · ${list.length} passages`:'');
+      return `<div class="chunk"><div class="chunk-head"><span class="chunk-src">${label}</span><span class="chunk-score">${top.toFixed(2)}</span></div>
+        <div class="bar"><i data-w="${Math.round(top*100)}"></i></div></div>`;
+    }).join('');
+  }
 
   function updateBadge(r){
     if(!r.abstained && r.grounded===false){ badge.className='status-badge off'; badge.innerHTML='<span class="dot" style="background:var(--warn);box-shadow:none"></span> general knowledge'; }
