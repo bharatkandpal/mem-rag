@@ -27,14 +27,18 @@ services:
       # Local, in-process embeddings — no key, no network at query time once cached.
       EMBEDDING_PROVIDER: transformers
       EMBEDDING_MODEL: Xenova/bge-large-en-v1.5
-      # bge-large's calibrated absolute-cosine floor (RAG-56) — NOT Voyage's 0.3.
-      MIN_SCORE: "0.59"
+      # bge-large's calibrated absolute-cosine floor — NOT Voyage's 0.3. RAG-56 set
+      # 0.59; nudged to 0.60 (still < the lowest real top score 0.612, so hit-rate
+      # holds 10/10). Can't go higher without dropping real answers — the two
+      # tech-adjacent out-of-corpus leaks (K8s 0.636, React 0.613) overlap the real
+      # range, so they're a model-side (soft-abstain) concern, not a floor one.
+      MIN_SCORE: "0.60"
       # Weight cache on a persistent, writable volume (node_modules is read-only).
       TRANSFORMERS_CACHE: /hf-cache
       # Local generation via host Ollama (OpenAI-compatible). No native citations here.
       GENERATION_PROVIDER: openai-compatible
       GENERATION_BASE_URL: http://host.docker.internal:11434/v1
-      GENERATION_MODEL: qwen2.5:7b
+      GENERATION_MODEL: qwen2.5:3b
       GENERATION_API_KEY: ""
     # Makes host.docker.internal resolve on Linux too (automatic on Docker Desktop).
     extra_hosts:
