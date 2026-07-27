@@ -76,6 +76,9 @@
   .hist-item:hover{background:var(--surface-2); color:var(--text)}
   .hist-item.active{background:var(--accent-subtle); color:var(--text); font-weight:500}
   .hist-item span{flex:1}
+  /* Per-conversation message count (shown when a conversation has >1 turn). */
+  .hist-count{flex:none; font-family:var(--mono); font-size:10px; color:var(--text-muted);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:0 6px; line-height:16px}
   .hist-del{flex:none; display:grid; place-items:center; width:22px; height:22px; border-radius:6px; border:0; background:transparent;
     color:var(--text-muted); cursor:pointer; opacity:0; transition:opacity .15s var(--ease), background .15s var(--ease), color .15s var(--ease)}
   .hist-item:hover .hist-del,.hist-item.active .hist-del{opacity:1}
@@ -91,6 +94,10 @@
   .role .dot{width:14px;height:14px;border-radius:5px;background:linear-gradient(135deg,var(--accent),var(--accent-hover))}
   .bubble{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:14px 16px; box-shadow:var(--shadow-sm)}
   .msg-user .bubble{background:var(--surface-2)}
+  /* Assistant answers are selectable: click one to load its references (below). */
+  .msg-assistant .bubble{transition:border-color .18s var(--ease), box-shadow .18s var(--ease)}
+  .msg-assistant .bubble:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+  .msg-assistant.ref-active .bubble{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle)}
   .answer{max-width:68ch}
   .answer h3{font-size:1.15rem; margin:14px 0 6px} .answer h4{font-size:1rem; margin:12px 0 6px}
   .answer p{margin:8px 0} .answer ul{margin:8px 0; padding-left:20px} .answer li{margin:3px 0}
@@ -134,8 +141,14 @@
   .ref-top{display:flex; align-items:center; gap:8px; margin-bottom:7px}
   .ref-num{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:var(--accent); width:18px; height:18px; border-radius:5px; display:grid; place-items:center; flex:none}
   .ref-src{font-family:var(--mono); font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ref-top .ref-src{flex:1; min-width:0}
+  /* Passage-count pill when one document contributed more than one reference. */
+  .ref-badge{flex:none; font-family:var(--mono); font-size:10px; font-weight:600; color:var(--text-secondary);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:1px 7px; white-space:nowrap}
   .ref-quote{font-size:12.5px; line-height:1.5; color:var(--text-secondary); white-space:pre-wrap;
     display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden}
+  /* Multiple passages from the same document stack under one card, lightly divided. */
+  .ref-item .ref-quote + .ref-quote{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border)}
   .ref-divider{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:16px 0 10px}
   .chunk{border:1px dashed var(--border); border-radius:var(--r-md); padding:10px 12px; margin-bottom:10px; opacity:.9}
   .chunk-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px}
@@ -205,7 +218,7 @@
     <aside class="sidebar sidebar-left" id="sidebarLeft">
       <button class="new-chat" id="newChat">＋ New chat</button>
       <div class="side-label">History</div>
-      <div id="history"><div class="hist-empty">No questions yet.</div></div>
+      <div id="history"><div class="hist-empty">No conversations yet.</div></div>
     </aside>
     <main class="center">
       <div class="conversation" id="conversation" aria-live="polite">
@@ -256,7 +269,9 @@
     }).join('');
   }
 
-  const history=[]; let activeIdx=-1; let lastQuestion=null;
+  // History is per-CONVERSATION, not per-query: a conversation is every turn
+  // between "New chat" clicks. conversations[i] = { title, turns:[{question,result}] }.
+  const conversations=[]; let activeConv=-1; let lastQuestion=null;
 
   async function fetchQuery(question){ return postQuery('/query',question); }
   async function fetchGeneral(question){ return postQuery('/query/general',question); }
@@ -295,7 +310,17 @@
     thread.appendChild(msg);
     const gb=msg.querySelector('[data-general]');
     if(gb) gb.addEventListener('click',()=>askGeneral(gb, question||lastQuestion));
-    setReferences(r); updateBadge(r); scrollDown();
+    // A thread can hold several answers; clicking a response loads ITS references
+    // into the panel (ignored when the click is a text selection). Newest is focused.
+    msg.addEventListener('click',()=>{ if(window.getSelection && !window.getSelection().isCollapsed) return; focusReferences(msg, r); });
+    focusReferences(msg, r); scrollDown();
+  }
+
+  // Highlight the picked response and load its references + badge into the panel.
+  function focusReferences(msg, r){
+    thread.querySelectorAll('.msg-assistant.ref-active').forEach(m=>m.classList.remove('ref-active'));
+    msg.classList.add('ref-active');
+    setReferences(r); updateBadge(r);
   }
 
   // Explicit opt-in: fetch an ungrounded general-knowledge answer for a question
@@ -318,7 +343,7 @@
       <div><div class="card-title">Something went wrong</div><div class="card-sub">Couldn’t reach the query service (${escapeHtml(err.message)}).</div>${rid}
       <button class="retry" id="retryBtn">Retry</button></div></div></div></div>`);
     thread.appendChild(m); scrollDown();
-    m.querySelector('#retryBtn').addEventListener('click',()=>{ m.remove(); if(lastQuestion) send(lastQuestion,false); });
+    m.querySelector('#retryBtn').addEventListener('click',()=>{ m.remove(); if(lastQuestion) send(lastQuestion); });
   }
 
   function setReferences(r){
@@ -326,23 +351,48 @@
     if(r.abstained){ refCount.textContent='0'; refList.innerHTML=refEmpty('No sources — the answer isn’t in the corpus.'); return; }
     if(r.grounded===false){ refCount.textContent='0'; refList.innerHTML=refEmpty('Answered from the model’s general knowledge — no corpus sources.'); return; }
     if(cites.length){
-      refCount.textContent=cites.length;
-      let html=cites.map((c,i)=>`<div class="ref-item enter" style="animation-delay:${i*60}ms">
-        <div class="ref-top"><span class="ref-num">${i+1}</span><span class="ref-src">${escapeHtml(c.source)}</span></div>
-        <div class="ref-quote">${escapeHtml((c.citedText||'').trim())}</div></div>`).join('');
+      // Converge cited spans onto their source document — one card per document,
+      // its passages nested beneath, so a document never repeats as N cards.
+      const groups=groupBySource(cites);
+      refCount.textContent=groups.length;
+      let html=groups.map(([src,items],i)=>{
+        const quotes=items.map(c=>`<div class="ref-quote">${escapeHtml((c.citedText||'').trim())}</div>`).join('');
+        const badge=items.length>1?`<span class="ref-badge">${items.length} passages</span>`:'';
+        return `<div class="ref-item enter" style="animation-delay:${i*60}ms">
+          <div class="ref-top"><span class="ref-num">${i+1}</span><span class="ref-src">${escapeHtml(src)}</span>${badge}</div>
+          ${quotes}</div>`;
+      }).join('');
       const cited=new Set(cites.map(c=>c.documentIndex));
-      const extra=chunks.map((c,idx)=>({c,idx})).filter(x=>!cited.has(x.idx));
-      if(extra.length) html+=`<div class="ref-divider">Also retrieved</div>`+extra.map(({c})=>chunkCard(c)).join('');
+      const extra=chunks.filter((c,idx)=>!cited.has(idx));
+      if(extra.length) html+=`<div class="ref-divider">Also retrieved</div>`+groupedChunks(extra);
       refList.innerHTML=html;
     } else {
-      refCount.textContent=chunks.length;
+      // No native citations (e.g. a local generation provider) — show the retrieved
+      // context, likewise converged to one card per source document.
+      const groups=groupBySource(chunks);
+      refCount.textContent=groups.length;
       refList.innerHTML=(r.citationsSupported===false?`<div class="capability-note" style="margin:0 0 12px">ⓘ provider can’t cite — showing retrieved context</div>`:'')
-        + (chunks.length?chunks.map(chunkCard).join(''):refEmpty('No retrieved context.'));
+        + (chunks.length?groupedChunks(chunks):refEmpty('No retrieved context.'));
     }
     requestAnimationFrame(()=>refList.querySelectorAll('.bar > i').forEach(b=>b.style.width=b.dataset.w+'%'));
   }
   const refEmpty=msg=>`<div class="ref-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><div>${msg}</div></div>`;
-  const chunkCard=c=>`<div class="chunk"><div class="chunk-head"><span class="chunk-src">${escapeHtml(c.source)}</span><span class="chunk-score">${(c.score||0).toFixed(2)}</span></div><div class="bar"><i data-w="${Math.round((c.score||0)*100)}"></i></div></div>`;
+  // Group citations or chunks by their source document, preserving first-seen order.
+  function groupBySource(items){
+    const m=new Map();
+    for(const it of items){ const k=it.source||'—'; if(!m.has(k)) m.set(k,[]); m.get(k).push(it); }
+    return [...m.entries()];
+  }
+  // One card per source document: filename (+ passage count) and its best score —
+  // instead of a separate score card per retrieved chunk.
+  function groupedChunks(items){
+    return groupBySource(items).map(([src,list])=>{
+      const top=Math.max(...list.map(c=>c.score||0));
+      const label=escapeHtml(src)+(list.length>1?` · ${list.length} passages`:'');
+      return `<div class="chunk"><div class="chunk-head"><span class="chunk-src">${label}</span><span class="chunk-score">${top.toFixed(2)}</span></div>
+        <div class="bar"><i data-w="${Math.round(top*100)}"></i></div></div>`;
+    }).join('');
+  }
 
   function updateBadge(r){
     if(!r.abstained && r.grounded===false){ badge.className='status-badge off'; badge.innerHTML='<span class="dot" style="background:var(--warn);box-shadow:none"></span> general knowledge'; }
@@ -351,24 +401,29 @@
   }
 
   function renderHistory(){
-    if(!history.length){ historyEl.innerHTML='<div class="hist-empty">No questions yet.</div>'; return; }
-    historyEl.innerHTML=history.map((h,i)=>`<div class="hist-item ${i===activeIdx?'active':''}" data-h="${i}">
+    if(!conversations.length){ historyEl.innerHTML='<div class="hist-empty">No conversations yet.</div>'; return; }
+    historyEl.innerHTML=conversations.map((c,i)=>`<div class="hist-item ${i===activeConv?'active':''}" data-h="${i}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      <span>${escapeHtml(h.question)}</span>
-      <button class="hist-del" data-del="${i}" title="Delete chat" aria-label="Delete chat">
+      <span>${escapeHtml(c.title)}</span>
+      ${c.turns.length>1?`<small class="hist-count" title="${c.turns.length} messages">${c.turns.length}</small>`:''}
+      <button class="hist-del" data-del="${i}" title="Delete conversation" aria-label="Delete conversation">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
       </button></div>`).join('');
-    historyEl.querySelectorAll('.hist-item').forEach(it=>it.addEventListener('click',()=>{
-      const i=+it.dataset.h; activeIdx=i; renderHistory();
-      thread.innerHTML=''; addUser(history[i].question); renderResult(history[i].result, history[i].question);
-    }));
-    historyEl.querySelectorAll('.hist-del').forEach(btn=>btn.addEventListener('click',e=>{ e.stopPropagation(); deleteHistory(+btn.dataset.del); }));
+    historyEl.querySelectorAll('.hist-item').forEach(it=>it.addEventListener('click',()=>openConversation(+it.dataset.h)));
+    historyEl.querySelectorAll('.hist-del').forEach(btn=>btn.addEventListener('click',e=>{ e.stopPropagation(); deleteConversation(+btn.dataset.del); }));
   }
 
-  function deleteHistory(i){
-    history.splice(i,1);
-    if(activeIdx===i){ activeIdx=-1; showEmpty(); }   // deleting the open chat → back to empty state
-    else if(activeIdx>i){ activeIdx--; }               // keep the active pointer aligned after the shift
+  // Restore a whole conversation into the thread — every turn, in order.
+  function openConversation(i){
+    activeConv=i; renderHistory();
+    thread.innerHTML='';
+    for(const turn of conversations[i].turns){ addUser(turn.question); renderResult(turn.result, turn.question); }
+  }
+
+  function deleteConversation(i){
+    conversations.splice(i,1);
+    if(activeConv===i){ activeConv=-1; showEmpty(); }   // deleting the open conversation → back to empty state
+    else if(activeConv>i){ activeConv--; }              // keep the active pointer aligned after the shift
     renderHistory();
   }
 
@@ -379,15 +434,22 @@
     refCount.textContent='0'; refList.innerHTML=refEmpty('Citations from the answer will appear here.'); updateBadge({});
   }
 
-  async function send(question, pushToHistory=true){
+  async function send(question){
     ask.disabled=true; lastQuestion=question; addUser(question);
     const loading=addLoading();
     try{
       const r=await fetchQuery(question);
       loading.remove(); renderResult(r, question);
-      if(pushToHistory){ history.unshift({question,result:r}); activeIdx=0; renderHistory(); }
+      recordTurn(question, r); renderHistory();
     }catch(err){ loading.remove(); renderError(err); }
     finally{ ask.disabled=false; }
+  }
+
+  // Append this turn to the active conversation, or start a new one (titled by the
+  // first question) when there's no active conversation — i.e. fresh / after New chat.
+  function recordTurn(question, result){
+    if(activeConv===-1){ conversations.unshift({title:question, turns:[{question,result}]}); activeConv=0; }
+    else { conversations[activeConv].turns.push({question,result}); }
   }
 
   function submit(){ const q=composer.value.trim(); if(!q) return; composer.value=''; autosize(); send(q); }
@@ -397,7 +459,7 @@
   composer.addEventListener('input',autosize);
   document.addEventListener('click',e=>{ const chip=e.target.closest('.chip'); if(chip){ composer.value=chip.textContent; submit(); } });
 
-  $('#newChat').addEventListener('click',()=>{ activeIdx=-1; renderHistory(); showEmpty(); });
+  $('#newChat').addEventListener('click',()=>{ activeConv=-1; renderHistory(); showEmpty(); });
   const bodyEl=$('.body');
   $('#toggleLeft').addEventListener('click',function(){ const hidden=$('#sidebarLeft').classList.toggle('hide'); bodyEl.classList.toggle('no-left',hidden); this.classList.toggle('on'); });
   $('#toggleRight').addEventListener('click',function(){ const hidden=$('#sidebarRight').classList.toggle('hide'); bodyEl.classList.toggle('no-right',hidden); this.classList.toggle('on'); });
