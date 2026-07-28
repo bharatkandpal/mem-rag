@@ -35,6 +35,13 @@ export interface GenerationOutput {
  * violation than admitting a provider doesn't have it.
  */
 export interface GenerationProvider {
+  /**
+   * Stable, low-cardinality provider identity (`anthropic`, `openai-compatible`)
+   * — used as the `provider` label on `rag_generation_duration_seconds` (RAG-63e)
+   * and in logs. Never a model id or anything user-derived (would explode the
+   * metric series).
+   */
+  readonly name: string;
   readonly supportsCitations: boolean;
   generate(question: string, chunks: RetrievedChunk[]): Promise<GenerationOutput>;
   /**

@@ -47,6 +47,36 @@ metrics — it does not replace the log lines.
 
 ---
 
+## 1a. Build decisions locked (2026-07-28)
+
+Five decisions surfaced while grounding the slice in the code — additive to the design above,
+settled before writing code so the build executes a decided shape:
+
+1. **HTTP request metrics are a Nest interceptor, not raw Express middleware.** The app serves
+   the static UI from `web/public` via `useStaticAssets` (`main.ts:14`); raw middleware would
+   observe every static-asset URL and explode `route` cardinality. A Nest interceptor fires only
+   on controller routes (`/healthz`, `/query`, `/query/general`, `/ingest`, `/metrics`) → bounded,
+   templated labels. Correlation stays middleware (it's label-free and must cover all requests).
+2. **No `uuid` dependency — use `randomUUID()` from `node:crypto`.** Node 18+ ships it. That makes
+   **`prom-client` the only new runtime dependency.**
+3. **`rag_query_total` outcome enum is `grounded | abstained | general`.** The guide's original
+   `grounded|abstained` missed `GenerationService.generateGeneral` (the sanctioned opt-in
+   ungrounded path, `POST /query/general`, `grounded:false, abstained:false`). It gets its own
+   `general` outcome so it's counted honestly and never mislabeled `grounded`.
+4. **The `provider` label comes from a new `GenerationProvider.name` getter.** `GenerationService`
+   holds the provider via a DI token with no identity; adding `readonly name` (`'anthropic'` /
+   `'openai-compatible'`) to the interface is the clean seam, vs. reading `GENERATION_PROVIDER`
+   config inside the service.
+5. **Correlated logging via `app.useLogger(customLogger)` — zero call-site edits.** Nest's
+   per-class `new Logger(name)` instances delegate to the logger registered at bootstrap, so a
+   custom `LoggerService` reading the id from ALS prefixes every existing RAG-42 log line without
+   touching a single call site.
+
+All observability code lands under a new global `src/observability/` module (keeps the OTel-swap
+seam of §6 isolated). **Not retrieval-affecting → `[eval-ok]`, no eval run** (rule `evals.md`).
+
+---
+
 ## 2. Principles
 
 - **Correlation ID everywhere, secrets nowhere.** Every log line inside a request carries the
@@ -90,8 +120,8 @@ metrics — it does not replace the log lines.
 | `rag_http_request_duration_seconds` | histogram | `route` | end-to-end latency |
 | `rag_ingest_docs_total` / `rag_ingest_chunks_total` | counter | — | ingestion throughput |
 | `rag_retrieval_score` | histogram | — | top-hit similarity distribution (feeds floor tuning) |
-| `rag_query_total` | counter | `outcome` = `grounded`\|`abstained` | query outcomes (abstain ≠ error) |
-| `rag_generation_duration_seconds` | histogram | `provider` | model latency by provider |
+| `rag_query_total` | counter | `outcome` = `grounded`\|`abstained`\|`general` | query outcomes (abstain ≠ error; `general` = opt-in ungrounded path, §1a-3) |
+| `rag_generation_duration_seconds` | histogram | `provider` | model latency by provider (label from `GenerationProvider.name`, §1a-4) |
 | `rag_errors_total` | counter | `type` | surfaced unhandled errors (§5) |
 
 > Label discipline: `route` is the templated path, `provider` is `anthropic`/`openai-compatible`,

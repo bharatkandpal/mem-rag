@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { MetricsService } from '../observability/metrics.service';
 import { RetrievalService } from '../retrieval/retrieval.service';
 import { RetrievedChunk } from '../vector-store/vector-store.interface';
 import { Citation, GENERATION_PROVIDER, GenerationProvider } from './generation-provider.interface';
@@ -35,6 +36,7 @@ export class GenerationService {
   constructor(
     @Inject(GENERATION_PROVIDER) private readonly provider: GenerationProvider,
     private readonly retrieval: RetrievalService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async generate(question: string): Promise<QueryResult> {
@@ -44,6 +46,7 @@ export class GenerationService {
     // Abstain on empty retrieval — never free-generate (D5). Provider-agnostic.
     if (chunks.length === 0) {
       this.logger.log('abstaining: no chunks cleared the score floor');
+      this.metrics?.recordQuery('abstained');
       return {
         answer: ABSTAIN_MESSAGE,
         citations: [],
@@ -54,7 +57,10 @@ export class GenerationService {
       };
     }
 
+    const genStarted = Date.now();
     const { answer, citations } = await this.provider.generate(question, chunks);
+    this.metrics?.observeGeneration(this.provider.name, (Date.now() - genStarted) / 1000);
+    this.metrics?.recordQuery('grounded');
 
     this.logger.log(
       `generated answer over ${chunks.length} chunks with ${citations.length} citations in ${Date.now() - started}ms`,
@@ -79,7 +85,10 @@ export class GenerationService {
    * visible rather than silent.
    */
   async generateGeneral(question: string): Promise<QueryResult> {
+    const genStarted = Date.now();
     const answer = await this.provider.generateGeneral(question);
+    this.metrics?.observeGeneration(this.provider.name, (Date.now() - genStarted) / 1000);
+    this.metrics?.recordQuery('general');
     this.logger.log('served explicit ungrounded general-knowledge answer (opt-in, not from corpus)');
     return {
       answer,

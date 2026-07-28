@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   EMBEDDING_PROVIDER,
   EmbeddingProvider,
 } from '../embedding/embedding-provider.interface';
+import { MetricsService } from '../observability/metrics.service';
 import {
   RetrievedChunk,
   VECTOR_STORE,
@@ -32,6 +33,7 @@ export class RetrievalService {
     @Inject(EMBEDDING_PROVIDER) private readonly embedder: EmbeddingProvider,
     @Inject(VECTOR_STORE) private readonly store: VectorStore,
     config: ConfigService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.k = toNumber(config.get('RETRIEVAL_K'), DEFAULT_K);
     this.minScore = toNumber(config.get('MIN_SCORE'), DEFAULT_MIN_SCORE);
@@ -41,6 +43,9 @@ export class RetrievalService {
     const started = Date.now();
     const [embedding] = await this.embedder.embed([query]);
     const hits = await this.store.search(embedding, this.k);
+    // Top-hit score (pre-floor) — the distribution that informs floor tuning,
+    // including the near-floor abstains a post-floor view would hide.
+    if (hits.length > 0) this.metrics?.observeRetrievalScore(hits[0].score);
     const kept = hits.filter((h) => h.score >= this.minScore);
     this.logger.log(
       `retrieve: ${hits.length} hits, ${kept.length} above floor ${this.minScore} (k=${this.k}) in ${Date.now() - started}ms`,

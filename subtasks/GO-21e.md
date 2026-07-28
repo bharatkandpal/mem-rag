@@ -6,9 +6,10 @@
 > polish (a deliberate revisit of the PRD "no UI polish" non-goal for the demo).
 > **Design guide to follow:** [`docs/ui-design-guide.md`](../docs/ui-design-guide.md).
 
-> ⛔ **Gate — RAG-63 (observability framework) blocks all *implementation* (GO-21e-b … h).**
-> A user-facing surface without tracing / metrics / error surfacing isn't shippable here
-> (`tasks.md:62`). Only GO-21e-a (this design guide) is safe to do pre-gate — it's planning.
+> ✅ **Gate lifted 2026-07-28 — RAG-63 (observability framework) landed.** Tracing / metrics /
+> error surfacing are in place, so GO-21e-b … h are unblocked. The correlation id is surfaced in
+> the error body (`{statusCode, message, correlationId}`) — exactly what GO-21e-h's `ErrorState`
+> shows. GO-21e-a (the design guide) was the only pre-gate-safe step; the rest can now proceed.
 
 | ID | Sub-task | Done when | Depends on |
 |----|----------|-----------|------------|
@@ -26,5 +27,5 @@ The one hard **gate** is RAG-63 (observability) before GO-21e-b onward — not a
 dependency. Streaming tokens, history persistence, auth, and multi-corpus switching are
 explicitly out of scope even at full polish (see guide §8).
 
-**Start here:** GO-21e-a is done (the design guide). The next actionable move is **GO-21e-b**
-(scaffold `web/`) — but it's gated: land **RAG-63** first, then scaffold.
+**Start here:** GO-21e-a is done (the design guide) and the **RAG-63 gate is lifted** (2026-07-28).
+The next actionable move is **GO-21e-b** (scaffold `web/`) — now unblocked.

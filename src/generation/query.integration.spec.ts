@@ -47,6 +47,7 @@ describe('POST /query (integration)', () => {
   };
 
   const provider: GenerationProvider = {
+    name: 'anthropic',
     supportsCitations: true,
     generate: jest.fn(async (_q, chunks) => ({
       answer: 'Embeddings live in Postgres via pgvector.',
@@ -140,5 +141,20 @@ describe('POST /query (integration)', () => {
 
   it('POST /query/general rejects an empty question with 400', async () => {
     await request(app.getHttpServer()).post('/query/general').send({}).expect(400);
+  });
+
+  it('surfaces an unexpected provider error as a structured 500 with a correlation id (RAG-63f)', async () => {
+    (provider.generate as jest.Mock).mockRejectedValueOnce(new Error('model exploded: key=sk-secret'));
+
+    const res = await request(app.getHttpServer())
+      .post('/query')
+      .send({ question: 'where are embeddings stored?' })
+      .expect(500);
+
+    // Generic body — the internal message/secret never leaks.
+    expect(res.body).toMatchObject({ statusCode: 500, message: 'Internal server error' });
+    expect(res.body.correlationId).toEqual(expect.any(String));
+    // Same id in the body and the echoed header → traceable end-to-end.
+    expect(res.headers['x-request-id']).toBe(res.body.correlationId);
   });
 });

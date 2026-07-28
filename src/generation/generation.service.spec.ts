@@ -1,3 +1,4 @@
+import { MetricsService } from '../observability/metrics.service';
 import { RetrievalService } from '../retrieval/retrieval.service';
 import { RetrievedChunk } from '../vector-store/vector-store.interface';
 import { GenerationProvider } from './generation-provider.interface';
@@ -14,6 +15,7 @@ describe('GenerationService', () => {
   let retrieve: jest.Mock;
   let generate: jest.Mock;
   let generateGeneral: jest.Mock;
+  let metrics: { recordQuery: jest.Mock; observeGeneration: jest.Mock };
   let service: GenerationService;
 
   const chunk = (over: Partial<RetrievedChunk> = {}): RetrievedChunk => ({
@@ -28,12 +30,14 @@ describe('GenerationService', () => {
     generate = jest.fn();
     generateGeneral = jest.fn();
     const provider = {
+      name: 'test',
       supportsCitations,
       generate,
       generateGeneral,
     } as unknown as GenerationProvider;
     const retrieval = { retrieve } as unknown as RetrievalService;
-    service = new GenerationService(provider, retrieval);
+    metrics = { recordQuery: jest.fn(), observeGeneration: jest.fn() };
+    service = new GenerationService(provider, retrieval, metrics as unknown as MetricsService);
   };
 
   beforeEach(() => build());
@@ -100,5 +104,34 @@ describe('GenerationService', () => {
     expect(result.abstained).toBe(false);
     expect(result.citations).toEqual([]);
     expect(result.chunks).toEqual([]);
+  });
+
+  // RAG-63e — outcome mapping is the nuanced part: abstain and the opt-in
+  // general path must be counted distinctly, and generation timed only when a
+  // provider call actually happens.
+  it('records outcome=grounded + times generation on the happy path', async () => {
+    retrieve.mockResolvedValue([chunk()]);
+    generate.mockResolvedValue({ answer: 'ok', citations: [] });
+
+    await service.generate('q');
+
+    expect(metrics.recordQuery).toHaveBeenCalledWith('grounded');
+    expect(metrics.observeGeneration).toHaveBeenCalledWith('test', expect.any(Number));
+  });
+
+  it('records outcome=abstained and never times generation when abstaining', async () => {
+    retrieve.mockResolvedValue([]);
+
+    await service.generate('q');
+
+    expect(metrics.recordQuery).toHaveBeenCalledWith('abstained');
+    expect(metrics.observeGeneration).not.toHaveBeenCalled();
+  });
+
+  it('records outcome=general for the opt-in ungrounded path', async () => {
+    await service.generateGeneral('q');
+
+    expect(metrics.recordQuery).toHaveBeenCalledWith('general');
+    expect(metrics.observeGeneration).toHaveBeenCalledWith('test', expect.any(Number));
   });
 });

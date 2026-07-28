@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingProvider } from '../embedding/embedding-provider.interface';
+import { MetricsService } from '../observability/metrics.service';
 import { ChunkInput, VectorStore } from '../vector-store/vector-store.interface';
 import { DocumentLoader, LoadedDocument } from './document-loader';
 import { IngestionService } from './ingestion.service';
@@ -14,6 +15,7 @@ describe('IngestionService', () => {
   let loader: { load: jest.Mock };
   let embedder: EmbeddingProvider & { embed: jest.Mock };
   let store: VectorStore & { upsert: jest.Mock };
+  let metrics: { recordIngest: jest.Mock };
   let service: IngestionService;
 
   const config = { get: (_key: string, def: unknown) => def } as unknown as ConfigService;
@@ -23,11 +25,13 @@ describe('IngestionService', () => {
     // Echo one vector per input so any chunk count works.
     embedder = { dims: 1024, embed: jest.fn(async (t: string[]) => t.map(() => [0.1])) };
     store = { upsert: jest.fn(async (c: ChunkInput[]) => c.length), search: jest.fn() };
+    metrics = { recordIngest: jest.fn() };
     service = new IngestionService(
       loader as unknown as DocumentLoader,
       embedder,
       store,
       config,
+      metrics as unknown as MetricsService,
     );
   });
 
@@ -71,5 +75,13 @@ describe('IngestionService', () => {
     expect(stats.docs).toBe(2);
     expect(stats.chunks).toBe(2);
     expect(store.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('records ingest throughput to metrics (RAG-63e)', async () => {
+    loader.load.mockResolvedValue([doc({ docId: 'a.md' }), doc({ docId: 'b.md' })]);
+
+    await service.ingest('corpus/');
+
+    expect(metrics.recordIngest).toHaveBeenCalledWith(2, 2);
   });
 });

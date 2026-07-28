@@ -32,6 +32,7 @@ const GENERAL_SYSTEM_PROMPT =
  * verifiable document blocks.
  */
 export class OpenAICompatibleGenerationProvider implements GenerationProvider {
+  readonly name = 'openai-compatible';
   readonly supportsCitations = false;
   private readonly logger = new Logger(OpenAICompatibleGenerationProvider.name);
 

@@ -13,20 +13,20 @@
 ### `src/main.ts`
 - **Purpose:** App entrypoint — bootstraps Nest, serves the static chat UI (`useStaticAssets` → `../web/public`, same origin as `/query`), reads `PORT`, starts the HTTP server.
 - **Defines:** `bootstrap(): Promise<void>`
-- **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `NestExpressApplication` (`@nestjs/platform-express`), `join` (`path`), `Logger`
+- **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `NestExpressApplication` (`@nestjs/platform-express`), `join` (`path`), `Logger`, `CorrelatedLogger` (`./observability/correlated-logger`, via `app.useLogger` — RAG-63c)
 - **Used by:** — (entrypoint; self-invoked via `void bootstrap()`)
 - **Serves:** `web/public/index.html` — single-page chat UI (vanilla, no build) that POSTs `/query` and renders the cited answer + a References panel; baked into the image (`Dockerfile COPY web/public`) and bind-mounted for live edits (`docker-compose.yml`).
 
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
 - **Defines:** `AppModule` (class)
-- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `HealthModule`
+- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `ObservabilityModule`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `GenerationModule`, `HealthModule`
 - **Used by:** `src/main.ts`
 
 ### `src/cli/main.ts`
-- **Purpose:** The `rag` CLI entrypoint (GO-21h, RAG-52) — commander program with `ingest <path>` and `query <question>` subcommands. Bootstraps `NestFactory.createApplicationContext(AppModule, { logger: false })` (same pattern as `eval/run-eval.ts`) and calls services in-process — no HTTP. Registered as `bin: { "rag": "dist/cli/main.js" }` in `package.json`. Errors → stderr, exit 1.
-- **Defines:** `withApp` (file-private helper) · commander `program` (self-executing)
-- **Depends on:** `AppModule`, `IngestionService`, `GenerationService`, `formatIngestStats`/`formatQueryResult` (`./format`), `commander`
+- **Purpose:** The `rag` CLI entrypoint (GO-21h, RAG-52) — commander program with `ingest <path>` and `query <question>` subcommands. Bootstraps `NestFactory.createApplicationContext(AppModule, { logger: false })` silent, then attaches `CorrelatedLogger` and runs each command body in one ALS correlation scope (RAG-63g) so operational logs carry one id per invocation. Calls services in-process — no HTTP. Registered as `bin: { "rag": "dist/cli/main.js" }`. Errors → stderr, exit 1.
+- **Defines:** `withApp` (file-private helper — bootstraps, sets logger, wraps `fn` in `runWithCorrelation`) · commander `program` (self-executing)
+- **Depends on:** `AppModule`, `IngestionService`, `GenerationService`, `CorrelatedLogger` + `runWithCorrelation` (`../observability/*`), `randomUUID` (`node:crypto`), `formatIngestStats`/`formatQueryResult` (`./format`), `commander`
 - **Used by:** — (entrypoint; invoked as `rag` / `node dist/cli/main.js`)
 
 ### `src/cli/format.ts`
@@ -37,7 +37,7 @@
 
 ### `src/generation/generation-provider.interface.ts`
 - **Purpose:** The generation swap point (TDD §2.5, D4 update) — mirrors `EmbeddingProvider`/`VectorStore`. Abstain-on-empty (D5) stays in `GenerationService`, one layer above; a provider only ever produces one grounded answer from a non-empty chunk list. `supportsCitations` is an honest capability flag — a provider without native citations returns `[]`, never a fabricated imitation.
-- **Defines:** `GenerationProvider` (interface: `supportsCitations`, `generate(question, chunks)`, `generateGeneral(question)` — explicit opt-in ungrounded answer, not corpus, never cited) · `GenerationOutput` (interface) · `Citation` (interface) · `GENERATION_PROVIDER` (DI token, const)
+- **Defines:** `GenerationProvider` (interface: `name` — stable low-cardinality provider id for the `rag_generation_duration_seconds` label (RAG-63e); `supportsCitations`; `generate(question, chunks)`; `generateGeneral(question)` — explicit opt-in ungrounded answer, not corpus, never cited) · `GenerationOutput` (interface) · `Citation` (interface) · `GENERATION_PROVIDER` (DI token, const)
 - **Used by:** `src/generation/anthropic-generation.provider.ts` (implements) · `src/generation/openai-compatible-generation.provider.ts` (implements) · `src/generation/generation.service.ts` · `src/generation/generation.module.ts` (binds token)
 
 ### `src/generation/anthropic-generation.provider.ts`
@@ -53,9 +53,9 @@
 - **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=openai-compatible`)
 
 ### `src/generation/generation.service.ts`
-- **Purpose:** Generation orchestration (RAG-25-30, D4) — retrieve → abstain-on-empty (D5, provider-agnostic policy) → delegate to the configured `GenerationProvider` for the model call.
+- **Purpose:** Generation orchestration (RAG-25-30, D4) — retrieve → abstain-on-empty (D5, provider-agnostic policy) → delegate to the configured `GenerationProvider` for the model call. Records `rag_query_total{outcome}` (grounded/abstained/general) + `rag_generation_duration_seconds{provider}` (RAG-63e).
 - **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `.generateGeneral(question): Promise<QueryResult>` (opt-in ungrounded; bypasses retrieval; `grounded:false`) · `QueryResult` (interface, incl. `citationsSupported`, `grounded`)
-- **Depends on:** `GENERATION_PROVIDER` (injected `GenerationProvider`), `RetrievalService`
+- **Depends on:** `GENERATION_PROVIDER` (injected `GenerationProvider`), `RetrievalService`, `MetricsService` (`@Optional`, RAG-63e)
 - **Used by:** `src/generation/generation.controller.ts`, `src/generation/generation.module.ts`
 
 ### `src/generation/generation.controller.ts`
@@ -70,9 +70,9 @@
 - **Used by:** `src/app.module.ts`
 
 ### `src/retrieval/retrieval.service.ts`
-- **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy (config); returns `[]` to enable abstain (D5).
+- **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy (config); returns `[]` to enable abstain (D5). Observes the top-hit (pre-floor) score to `rag_retrieval_score` (RAG-63e).
 - **Defines:** `RetrievalService` (class) · `RetrievalService.retrieve(query): Promise<RetrievedChunk[]>` · `toNumber` (file-private)
-- **Depends on:** `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`RETRIEVAL_K`/`MIN_SCORE`)
+- **Depends on:** `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`RETRIEVAL_K`/`MIN_SCORE`), `MetricsService` (`@Optional`, RAG-63e)
 - **Used by:** `src/retrieval/retrieval.module.ts`; consumed by generation (RAG-27)
 
 ### `src/retrieval/retrieval.module.ts`
@@ -81,9 +81,9 @@
 - **Used by:** `src/app.module.ts`
 
 ### `src/ingestion/ingestion.service.ts`
-- **Purpose:** The ingestion pipeline (RAG-16) — `load → chunk → embed → upsert`; thin orchestrator over the loader + the two adapter interfaces.
+- **Purpose:** The ingestion pipeline (RAG-16) — `load → chunk → embed → upsert`; thin orchestrator over the loader + the two adapter interfaces. Records `rag_ingest_docs_total` / `rag_ingest_chunks_total` (RAG-63e).
 - **Defines:** `IngestionService` (class) · `IngestionService.ingest(path): Promise<IngestStats>` · `IngestStats` (interface)
-- **Depends on:** `DocumentLoader`, `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`CHUNK_TOKENS`/`OVERLAP_TOKENS`), `chunk` (`./chunker`)
+- **Depends on:** `DocumentLoader`, `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`CHUNK_TOKENS`/`OVERLAP_TOKENS`), `chunk` (`./chunker`), `MetricsService` (`@Optional`, RAG-63e)
 - **Used by:** `src/ingestion/ingestion.controller.ts`, `src/ingestion/ingestion.module.ts`
 
 ### `src/ingestion/ingestion.controller.ts`
@@ -176,6 +176,55 @@
 - **Depends on:** `PG_POOL` (injected `Pool`)
 - **Used by:** `src/health/health.module.ts` (controller); route consumed by clients / docker healthcheck path
 
+### `src/observability/correlation.als.ts`
+- **Purpose:** Request-scoped correlation context (RAG-63b) — one id propagated across the async call chain (ingest → retrieve → generate) via `AsyncLocalStorage`, no signature threading. OTel-span-context swap seam (guide §6).
+- **Defines:** `correlationStorage` (`AsyncLocalStorage<CorrelationStore>`) · `runWithCorrelation<T>(fn, correlationId?): T` · `getCorrelationId(): string | undefined` · `CorrelationStore` (interface)
+- **Depends on:** `node:async_hooks`, `node:crypto` (`randomUUID`)
+- **Used by:** `src/observability/correlation.middleware.ts` (HTTP scope); (RAG-63c correlated logger + RAG-63g CLI will consume `getCorrelationId`/`runWithCorrelation`)
+
+### `src/observability/correlation.middleware.ts`
+- **Purpose:** HTTP correlation middleware (RAG-63b) — honours inbound `x-request-id` else mints `randomUUID()`, echoes it on the response header, runs the request inside the ALS scope. Middleware (not interceptor) so it wraps the whole lifecycle incl. the RAG-63f exception filter.
+- **Defines:** `CorrelationMiddleware` (class, `NestMiddleware`) · `CorrelationMiddleware.use(req, res, next)`
+- **Depends on:** `correlationStorage` (`./correlation.als`), `node:crypto` (`randomUUID`)
+- **Used by:** `src/observability/observability.module.ts` (applied `forRoutes('*')`)
+
+### `src/observability/observability.module.ts`
+- **Purpose:** Global (`@Global`) observability module (RAG-63) — one home for tracing/metrics/error-surfacing wiring, isolating it from feature code. Applies `CorrelationMiddleware` (RAG-63b), registers `MetricsController`, the global `HttpMetricsInterceptor` (`APP_INTERCEPTOR`, RAG-63d) and the global `AllExceptionsFilter` (`APP_FILTER`, RAG-63f), and exports `MetricsService` so feature services can add domain metrics (RAG-63e).
+- **Defines:** `ObservabilityModule` (class, `@Global` `NestModule`) · `configure(consumer)` (applies `CorrelationMiddleware` to all routes)
+- **Depends on:** `CorrelationMiddleware`, `MetricsService`, `MetricsController`, `HttpMetricsInterceptor`, `AllExceptionsFilter`, `APP_INTERCEPTOR`/`APP_FILTER` (`@nestjs/core`)
+- **Exports:** `MetricsService`
+- **Used by:** `src/app.module.ts`
+
+### `src/observability/metrics.service.ts`
+- **Purpose:** Owns the prom-client `Registry` + instruments (RAG-63d/e). Dedicated registry (not the global default) so instruments never collide across app/test instances. `METRICS_ENABLED` (default true) gates the `/metrics` route + default collectors; `collectDefaultMetrics` runs in `onModuleInit` (not the ctor) so unit tests stay handle-free. Feature services record the domain series via the `record*`/`observe*` methods.
+- **Defines:** `MetricsService` (class, `OnModuleInit`) · `QueryOutcome` (type: `grounded`\|`abstained`\|`general`) · `registry` · `enabled` · HTTP: `httpRequests` (Counter) / `httpDuration` (Histogram) · domain (RAG-63e): `ingestDocs`/`ingestChunks` (Counter), `retrievalScore` (Histogram), `queryTotal` (Counter), `generationDuration` (Histogram) · errors (RAG-63f): `errors` (Counter) · methods `recordIngest`/`observeRetrievalScore`/`recordQuery`/`observeGeneration`/`recordError` · `onModuleInit()` · `render(): Promise<string>`
+- **Depends on:** `ConfigService`, `prom-client` (`Counter`/`Histogram`/`Registry`/`collectDefaultMetrics`)
+- **Used by:** `src/observability/metrics.controller.ts`, `src/observability/http-metrics.interceptor.ts`, `src/observability/all-exceptions.filter.ts`, `src/ingestion/ingestion.service.ts`, `src/retrieval/retrieval.service.ts`, `src/generation/generation.service.ts`
+
+### `src/observability/metrics.controller.ts`
+- **Purpose:** `GET /metrics` — Prometheus scrape endpoint (RAG-63d), mirrors `/healthz`. Thin: delegates to `MetricsService.render()`; 404s when `METRICS_ENABLED=false`.
+- **Defines:** `MetricsController` (class) · `MetricsController.scrape(): Promise<string>` · `PROMETHEUS_CONTENT_TYPE` (const)
+- **Depends on:** `MetricsService`
+- **Used by:** `src/observability/observability.module.ts` (controller); route consumed by a Prometheus scraper
+
+### `src/observability/http-metrics.interceptor.ts`
+- **Purpose:** Records `rag_http_requests_total` + `rag_http_request_duration_seconds` per controller request (RAG-63d). Interceptor (not middleware) so `route` is the templated path and static assets never reach it. Records on the response `finish` event so status is the final code.
+- **Defines:** `HttpMetricsInterceptor` (class, `NestInterceptor`) · `intercept(context, next)`
+- **Depends on:** `MetricsService`, `rxjs` (`Observable`)
+- **Used by:** `src/observability/observability.module.ts` (global `APP_INTERCEPTOR`)
+
+### `src/observability/correlated-logger.ts`
+- **Purpose:** `ConsoleLogger` that prefixes each line with the ALS correlation id (RAG-63c). Registered via `app.useLogger()` so the existing RAG-42 `new Logger(name)` call sites become correlated with zero changes. No id / non-string message → passed through unchanged. Optional `forcedStream` pins all output to one stream — the CLI passes `'stderr'` (RAG-63g) so stdout stays a clean, pipeable result; the HTTP app leaves it unset (normal stdout/stderr split).
+- **Defines:** `CorrelatedLogger` (class, extends `ConsoleLogger`) · `constructor(forcedStream?)` · overrides `log`/`error`/`warn`/`debug`/`verbose` + `printMessages` (stream override) · `withCorrelation(message)` (private)
+- **Depends on:** `getCorrelationId` (`./correlation.als`), `ConsoleLogger`/`LogLevel` (`@nestjs/common`)
+- **Used by:** `src/main.ts` (`app.useLogger`, stdout) · `src/cli/main.ts` (`app.useLogger('stderr')`)
+
+### `src/observability/all-exceptions.filter.ts`
+- **Purpose:** Global exception filter — error surfacing (RAG-63f). Stamps the correlation id (header + body) on failures; counts only genuine server faults (`status >= 500` → `rag_errors_total{type}` + stack log). Preserves an `HttpException`'s intentional payload (`/healthz` flags, validation messages), enriching it with `correlationId`; an unexpected error gets a generic 500 body that never leaks internals. 4xx + abstain are never counted.
+- **Defines:** `AllExceptionsFilter` (class, `@Catch()` `ExceptionFilter`) · `catch(exception, host)`
+- **Depends on:** `getCorrelationId` (`./correlation.als`), `MetricsService`, `HttpException`/`Logger` (`@nestjs/common`)
+- **Used by:** `src/observability/observability.module.ts` (global `APP_FILTER`)
+
 ### `eval/metrics.ts`
 - **Purpose:** Pure eval metric functions (RAG-39, RAG-57) — no I/O, NestJS, or network, so they're trivially unit-testable (`metrics.spec.ts`). An `EvalEntry` with empty `relevant_doc_ids` is a should-abstain (out-of-corpus) case.
 - **Defines:** `computeMetrics(chunks, relevantDocIds): { hit, precision }` · `computeAbstain(chunks): { hit, precision }` · `formatTable(results, k): string` (separate hit-rate + abstain-rate summaries) · `EvalEntry` (interface) · `EvalResult` (interface, incl. `expectAbstain?`)
@@ -241,6 +290,19 @@
 | `HealthController` | class | `src/health/health.controller.ts` | `src/health/health.module.ts` |
 | `HealthController.check` | method | `src/health/health.controller.ts` | route `GET /healthz` |
 | `HealthReport` | interface | `src/health/health.controller.ts` | `src/health/health.controller.ts` (return type) |
+| `correlationStorage` | const (`AsyncLocalStorage`) | `src/observability/correlation.als.ts` | `src/observability/correlation.middleware.ts` |
+| `runWithCorrelation` | function | `src/observability/correlation.als.ts` | (RAG-63g CLI) · `correlation.spec.ts` |
+| `getCorrelationId` | function | `src/observability/correlation.als.ts` | (RAG-63c logger) · `correlation.spec.ts` |
+| `CorrelationStore` | interface | `src/observability/correlation.als.ts` | `src/observability/correlation.als.ts` (ALS type) |
+| `CorrelationMiddleware` | class | `src/observability/correlation.middleware.ts` | `src/observability/observability.module.ts` |
+| `ObservabilityModule` | class | `src/observability/observability.module.ts` | `src/app.module.ts` |
+| `MetricsService` | class | `src/observability/metrics.service.ts` | metrics controller + http interceptor; observability module (exported); ingestion/retrieval/generation services (`@Optional`, RAG-63e) |
+| `QueryOutcome` | type | `src/observability/metrics.service.ts` | `src/generation/generation.service.ts` (via `recordQuery`) |
+| `MetricsController` | class | `src/observability/metrics.controller.ts` | `src/observability/observability.module.ts` |
+| `MetricsController.scrape` | method | `src/observability/metrics.controller.ts` | route `GET /metrics` |
+| `HttpMetricsInterceptor` | class | `src/observability/http-metrics.interceptor.ts` | `src/observability/observability.module.ts` (global `APP_INTERCEPTOR`) |
+| `CorrelatedLogger` | class | `src/observability/correlated-logger.ts` | `src/main.ts` (`app.useLogger`) · `src/cli/main.ts` (stderr) |
+| `AllExceptionsFilter` | class | `src/observability/all-exceptions.filter.ts` | `src/observability/observability.module.ts` (global `APP_FILTER`) |
 | `computeMetrics` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
 | `computeAbstain` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
 | `formatTable` | function | `eval/metrics.ts` | `eval/run-eval.ts`, `eval/metrics.spec.ts` |
@@ -251,6 +313,7 @@
 | Method | Path | Handler | File |
 |--------|------|---------|------|
 | GET | `/healthz` | `HealthController.check` | `src/health/health.controller.ts` |
+| GET | `/metrics` | `MetricsController.scrape` | `src/observability/metrics.controller.ts` (404 when `METRICS_ENABLED=false`) |
 | POST | `/ingest` | `IngestionController.ingest` | `src/ingestion/ingestion.controller.ts` |
 | POST | `/query` | `GenerationController.query` | `src/generation/generation.controller.ts` |
 | POST | `/query/general` | `GenerationController.general` | `src/generation/generation.controller.ts` |
@@ -260,6 +323,7 @@
 | Var | Read in | Default |
 |-----|---------|---------|
 | `PORT` | `src/main.ts` | 3000 |
+| `METRICS_ENABLED` | `src/observability/metrics.service.ts` (gates `/metrics` route + default collectors) | true |
 | `DATABASE_URL` | `src/database/database.module.ts` | — |
 | `ANTHROPIC_API_KEY` | `src/generation/generation.module.ts` (factory, `anthropic` branch only) | — |
 | `GENERATION_PROVIDER` | `src/generation/generation.module.ts` (factory selection) | anthropic |

@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
+import { randomUUID } from 'node:crypto';
 import { Command } from 'commander';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { GenerationService } from '../generation/generation.service';
+import { CorrelatedLogger } from '../observability/correlated-logger';
+import { runWithCorrelation } from '../observability/correlation.als';
 import { formatIngestStats, formatQueryResult } from './format';
 
 /**
@@ -16,11 +19,17 @@ import { formatIngestStats, formatQueryResult } from './format';
 type AppContext = Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 async function withApp(fn: (app: AppContext) => Promise<void>): Promise<void> {
+  // Bootstrap silent (no Nest init noise on the CLI), then attach the correlated
+  // logger and run the command body inside one ALS scope (RAG-63g) so every
+  // operational RAG-42 log line for this invocation carries the same id. The
+  // formatted result still prints via console.log — logs are the diagnostics.
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: false,
   });
+  // Logs → stderr so stdout stays a clean, pipeable result (RAG-63g).
+  app.useLogger(new CorrelatedLogger('stderr'));
   try {
-    await fn(app);
+    await runWithCorrelation(() => fn(app), randomUUID());
   } finally {
     await app.close();
   }

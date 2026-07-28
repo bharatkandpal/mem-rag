@@ -26,6 +26,7 @@ const GENERAL_SYSTEM_PROMPT =
  * verifiable, not model-formatted text.
  */
 export class AnthropicGenerationProvider implements GenerationProvider {
+  readonly name = 'anthropic';
   readonly supportsCitations = true;
   private readonly logger = new Logger(AnthropicGenerationProvider.name);
 

@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   EMBEDDING_PROVIDER,
   EmbeddingProvider,
 } from '../embedding/embedding-provider.interface';
+import { MetricsService } from '../observability/metrics.service';
 import {
   ChunkInput,
   VECTOR_STORE,
@@ -34,6 +35,7 @@ export class IngestionService {
     @Inject(EMBEDDING_PROVIDER) private readonly embedder: EmbeddingProvider,
     @Inject(VECTOR_STORE) private readonly store: VectorStore,
     config: ConfigService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.chunkOptions = {
       chunkTokens: config.get<number>('CHUNK_TOKENS', DEFAULT_CHUNK_OPTIONS.chunkTokens),
@@ -65,6 +67,7 @@ export class IngestionService {
 
     const ms = Date.now() - started;
     this.logger.log(`ingested ${docs.length} docs, ${totalChunks} chunks in ${ms}ms`);
+    this.metrics?.recordIngest(docs.length, totalChunks);
     return { docs: docs.length, chunks: totalChunks, ms };
   }
 }
