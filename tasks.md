@@ -93,8 +93,10 @@
 ## Milestone GO-21i — MCP server layer (expose RAG to AI agents)  — **PLAN-FIRST**
 
 > Turns the pipeline into a retrieval **tool** any MCP-capable agent (Claude Desktop, Claude Code, custom agents) can call — a third entrypoint over the same in-process services, mirroring the CLI (GO-21h) and HTTP API. Design before code. Plan: [`docs/superpowers/plans/2026-07-17-mcp-layer.md`](docs/superpowers/plans/2026-07-17-mcp-layer.md).
+>
+> 🧭 **Design doc drafted 2026-07-29** → accepted design guide [`docs/mcp-layer-guide.md`](docs/mcp-layer-guide.md): D1–D5 resolved (both structured+text results · `rag_ingest` behind `MCP_ENABLE_INGEST` · stderr logging via the RAG-63 `CorrelatedLogger` · stdio no-auth / HTTP bearer · no eval, `answer-eval` after wiring), pinned against the real `QueryResult` (`abstained`+`grounded`) and the current Anthropic MCP connector shapes. Ready to slice into RAG-65a…f (build slices listed in §8). **Next actionable = RAG-65a** (entrypoint + `@modelcontextprotocol/sdk` pin).
 
-- [ ] RAG-65 — **MCP layer — thorough design doc** (tool surface, service reuse, transport, auth, citation→MCP mapping, abstain semantics). Gates the build sub-tasks (RAG-65a…) decomposed from the plan once accepted.  · new capability, `add-adapter`-style seam
+- [ ] RAG-65 — **MCP layer — thorough design doc** (tool surface, service reuse, transport, auth, citation→MCP mapping, abstain semantics). Gates the build sub-tasks (RAG-65a…) decomposed from the plan once accepted.  · new capability, `add-adapter`-style seam → **design doc delivered** ([`docs/mcp-layer-guide.md`](docs/mcp-layer-guide.md)); sliced RAG-65a…f, pending acceptance to start the build
 
 ## Milestone GO-21j — Embeddable scaffold: `npm run rag init`  (Integrator persona, PRD §3) — **PLAN-FIRST**
 
