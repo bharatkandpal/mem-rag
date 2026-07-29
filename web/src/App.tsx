@@ -2,23 +2,15 @@ import { useCallback, useEffect, useReducer, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { EmptyState } from './components/EmptyState';
 import { HistoryDrawer } from './components/HistoryDrawer';
+import { Conversation } from './components/Conversation';
 import { fetchQuery, QueryError } from './api';
-import {
-  activeExchange,
-  init,
-  phaseOf,
-  reducer,
-  saveHistory,
-  type Exchange,
-  type Phase,
-} from './state';
-import './interim.css';
+import { activeExchange, init, phaseOf, reducer, saveHistory } from './state';
 
 /**
  * Wires the AppShell + a persisted history of questions (decision 2026-07-29,
- * guide §2/§8) around a `useReducer` query flow. The designed Conversation /
- * AnswerBody / SourcesPanel and the four state cards land in GO-21e-d…f; until
- * then the non-empty phases render the clearly-marked interim view below.
+ * guide §2/§8) around a `useReducer` query flow. GO-21e-d renders the query
+ * happy path via `Conversation`; the designed abstain/error cards (GO-21e-e)
+ * and citation markers + `SourcesPanel` (GO-21e-f) land next.
  */
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, init);
@@ -78,40 +70,9 @@ export default function App() {
         {active === null ? (
           <EmptyState onPick={submit} />
         ) : (
-          <InterimResult exchange={active} phase={phase} />
+          <Conversation exchange={active} phase={phase} />
         )}
       </AppShell>
     </>
-  );
-}
-
-/** Placeholder result view — replaced by the designed components in GO-21e-d…f. */
-function InterimResult({ exchange, phase }: { exchange: Exchange; phase: Phase }) {
-  const { question, result, error } = exchange;
-  return (
-    <div className="interim">
-      <p className="interim__question">{question}</p>
-
-      {phase === 'loading' && <p className="interim__meta">Retrieving &amp; generating…</p>}
-
-      {(phase === 'answered' || phase === 'abstained') && result && (
-        <>
-          <p className="interim__answer">{result.answer}</p>
-          <p className="interim__meta">
-            {phase === 'abstained' ? 'abstained · ' : ''}
-            {result.citations.length} citation{result.citations.length === 1 ? '' : 's'} ·{' '}
-            {result.chunks.length} chunk{result.chunks.length === 1 ? '' : 's'}
-            {!result.citationsSupported && ' · citations unsupported'}
-          </p>
-        </>
-      )}
-
-      {phase === 'error' && error && (
-        <p className="interim__error">
-          {error.message}
-          {error.correlationId ? ` (trace: ${error.correlationId})` : ''}
-        </p>
-      )}
-    </div>
   );
 }

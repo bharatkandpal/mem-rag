@@ -1,0 +1,9 @@
+.conversation {
+  padding: var(--space-4) 0 var(--space-2);
+}
+
+/* Interim error line — replaced by the designed ErrorState in GO-21e-e. */
+.conversation__error-interim {
+  margin: 0;
+  color: var(--danger);
+}
