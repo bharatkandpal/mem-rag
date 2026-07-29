@@ -9,7 +9,7 @@ Evolve the schema without breaking a running corpus.
 
 ## Current state
 
-Schema is bootstrapped by `db/init/001_init.sql`, auto-applied by the Postgres container on **first** start only (initdb). That's fine for fresh local runs; it does **not** re-run on existing volumes, and it won't cover production. RAG-46 tracks a real migration runner for deploy.
+Schema is applied by a real migration runner (`src/database/migrate.ts`, `npm run migrate`, **RAG-46**) — the single schema authority. It reads the append-only files under `db/migrations/`, applies every one not yet in the `schema_migrations` ledger (each file + its ledger insert in one transaction), and is idempotent. In Compose a one-shot `migrate` service runs it before `seed`/`app`; for a host / managed Postgres run it directly (`DATABASE_URL=… npm run migrate`) or as a k8s Job / init-container. The old initdb-only bootstrap (`db/init/…`, first-start-only) is gone — it never re-ran on existing volumes and didn't cover production.
 
 ## Authoring a migration
 
@@ -28,8 +28,9 @@ Flag this loudly whenever `add-adapter` introduces an embedding model with diffe
 
 ## Applying
 
-- **Local:** apply against the running `db` (`psql "$DATABASE_URL" -f db/migrations/00X_*.sql`), or rebuild the volume for a clean initdb.
-- **Deploy (RAG-46):** run migrations as a step before the app starts; idempotent files make this safe to re-run.
+- **Compose:** the one-shot `migrate` service applies pending migrations on every `up` (before `seed`/`app`); nothing to do by hand. A `docker compose down -v` + `up` rebuilds the volume and re-applies from scratch.
+- **Local host / managed Postgres:** `npm run build && DATABASE_URL=… npm run migrate` — applies every pending `db/migrations/*.sql`. Idempotent (ledger-tracked), so re-running is a no-op.
+- **Deploy (RAG-46):** run the runner as a step before the app starts (a k8s Job / init-container, a Fly `release_command`, …); the same idempotent runner covers it.
 
 ## Guardrails
 

@@ -88,7 +88,7 @@ For the **cloud profile** (Voyage + Anthropic, native citations), with keys in `
 docker compose -f docker-compose.cloud.yml up --build -d
 ```
 
-Either way the schema and the `vector` extension are applied automatically on first start — no manual migration step. The default profile brings up `db` (`pgvector/pgvector:0.8.1-pg16`, exposed on `localhost:5432`), a bundled `ollama` server, one-shot `ollama-pull` + `seed` jobs, and the NestJS API (on `localhost:3000`). Verify it's live:
+Either way the schema and the `vector` extension are applied automatically by a one-shot **`migrate`** service that runs before the app — no manual step. The default profile brings up `db` (`pgvector/pgvector:0.8.1-pg16`, exposed on `localhost:5432`), a bundled `ollama` server, one-shot `migrate` + `ollama-pull` + `seed` jobs, and the NestJS API (on `localhost:3000`). Verify it's live:
 
 ```bash
 curl -s localhost:3000/healthz   # {"status":"ok","db":true,"pgvector":true}
@@ -96,6 +96,14 @@ curl -s localhost:3000/metrics   # Prometheus metrics (see Observability below)
 ```
 
 `db: true` confirms the connection; `pgvector: true` confirms the extension loaded. Logs stream with `docker compose logs -f app` — each line carries the request's correlation id (see [Observability](#observability--metrics-tracing-error-surfacing)). The **browser chat UI is served on the same address** — open [`http://localhost:3000`](http://localhost:3000) (see [step 6](#6-chat-in-the-browser)).
+
+**Schema & migrations.** The schema lives in versioned, append-only files under [`db/migrations/`](db/migrations) and is applied by a small migration runner (`src/database/migrate.ts`), not a first-boot-only initdb hook — so it also covers existing volumes and managed Postgres. In Compose the one-shot `migrate` service runs it automatically; against your own database run it directly:
+
+```bash
+npm run build && DATABASE_URL=postgres://… npm run migrate   # applies every pending db/migrations/*.sql
+```
+
+It's idempotent — each migration is recorded in a `schema_migrations` ledger and re-runs are a no-op — so it's safe as a pre-deploy step (a k8s Job / init-container, a Fly `release_command`, etc.). To add a schema change, drop a new numbered `db/migrations/00N_<change>.sql` (see the `db-migration` skill for the pgvector dimensionality trap).
 
 ### 4. Build the CLI (host-side tools)
 
@@ -152,7 +160,7 @@ See [Retrieval quality](#retrieval-quality--the-eval-gate) for the baseline numb
 ### Troubleshooting
 
 - **`healthz` shows `db: false`** — pgvector isn't up yet; give it a few seconds on first boot or check `docker compose logs db`.
-- **`pgvector: false`** — the extension didn't load; a full `docker compose down -v && docker compose up --build` recreates the volume and re-runs init.
+- **`pgvector: false`** — the extension didn't load; a full `docker compose down -v && docker compose up --build` recreates the volume and re-runs the `migrate` service.
 - **CLI / eval can't connect to Postgres** — host-side tools use `DATABASE_URL` on `localhost:5432`; make sure the `db` service is running and the port isn't shadowed by another Postgres.
 - **Query always abstains** — either nothing has been ingested yet, or the question is genuinely out-of-corpus; lower `MIN_SCORE` only with an eval run to back it (see the evals rule).
 - **`401` from a provider** — a missing or invalid `VOYAGE_API_KEY` / `ANTHROPIC_API_KEY` in `.env`.

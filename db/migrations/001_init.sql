@@ -1,6 +1,9 @@
--- Initial schema (TDD §2.2). Runs automatically on first DB start via
--- the Postgres docker-entrypoint-initdb.d mount. VECTOR(1024) matches
--- the default Voyage voyage-3 embedding dimensionality.
+-- Initial schema (TDD §2.2). Applied by the migration runner
+-- (src/database/migrate.ts, `npm run migrate`, RAG-46) — the single schema
+-- authority for both fresh local runs and deploy. Append-only + idempotent
+-- (IF NOT EXISTS) so re-application is a no-op. VECTOR(1024) matches the
+-- default Voyage voyage-3 embedding dimensionality (see the dims trap in the
+-- db-migration skill before changing it).
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
