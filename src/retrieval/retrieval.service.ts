@@ -17,6 +17,20 @@ const DEFAULT_K = 5;
 // question still clears it. Known residual: tech-adjacent junk can score ~0.35+.
 const DEFAULT_MIN_SCORE = 0.3;
 
+/** DI token for an optional {@link RagRetrievalOptions} override (RAG-66c). */
+export const RAG_RETRIEVAL_OPTIONS = 'RAG_RETRIEVAL_OPTIONS';
+
+/**
+ * Explicit k / min-score override, provided by `RagModule.forRoot({ k, minScore })`
+ * (RAG-66c). Not bound by the standalone app — RetrievalModule's plain (non-`register`)
+ * form never provides this token, so `@Optional()` resolves `undefined` there and
+ * behavior is unchanged: env via `ConfigService`, same as before RAG-66c.
+ */
+export interface RagRetrievalOptions {
+  k?: number;
+  minScore?: number;
+}
+
 /**
  * Retrieval (RAG-20/23): embed the query, fetch cosine top-k from the store,
  * then drop anything below the min-score floor. The floor + k are policy and
@@ -34,9 +48,13 @@ export class RetrievalService {
     @Inject(VECTOR_STORE) private readonly store: VectorStore,
     config: ConfigService,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional()
+    @Inject(RAG_RETRIEVAL_OPTIONS)
+    options?: RagRetrievalOptions,
   ) {
-    this.k = toNumber(config.get('RETRIEVAL_K'), DEFAULT_K);
-    this.minScore = toNumber(config.get('MIN_SCORE'), DEFAULT_MIN_SCORE);
+    this.k = options?.k ?? toNumber(config.get('RETRIEVAL_K'), DEFAULT_K);
+    this.minScore =
+      options?.minScore ?? toNumber(config.get('MIN_SCORE'), DEFAULT_MIN_SCORE);
   }
 
   async retrieve(query: string): Promise<RetrievedChunk[]> {

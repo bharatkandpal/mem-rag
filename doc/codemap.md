@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** RAG-66b embeddable surface — new `src/index.ts` (public library barrel: `RagModule` + `IngestionService`/`RetrievalService`/`GenerationService` + adapter seams/types) and `src/rag.module.ts` (`RagModule.forRoot()` dynamic module composing the feature modules, env-first); `IngestionModule`/`GenerationModule` now `exports` their service so `RagModule` can re-export it; `package.json` made importable (`private:false`, `main`/`types`/`exports`/`files`, `prepack`); `tsconfig` `declaration:true` for shipped `.d.ts`. Prior: RAG-67 key-free local slice — `TransformersEmbeddingProvider.defaultLoader` honours `TRANSFORMERS_CACHE` (relocatable weight cache off the read-only `node_modules` path); Dockerfile pre-creates a nonroot-owned `/hf-cache` + sets `TRANSFORMERS_CACHE`; new `docker-compose.local.yml` overlay runs the stack key-free (transformers embeddings + Ollama generation).
+> **Last updated:** RAG-66c typed `forRoot(options)` override surface — `RagModuleOptions` (`embeddingProvider`/`generationProvider`/`k`/`minScore`/`http`); `EmbeddingModule`/`GenerationModule`/`IngestionModule`/`RetrievalModule` each gained a `register()` static (the override-aware path) alongside their existing decorator-based default. `GenerationModule`/`IngestionModule` decorators had `imports`/`controllers` **removed** (moved into `register()` only) — Nest concatenates a class's static `@Module()` metadata with a `DynamicModule`'s own `imports`/`controllers` rather than replacing them, so a decorator-level `imports:[RetrievalModule]` silently fought `register()`'s override-aware import (see `generation.module.ts` doc comment); `providers` concatenation is safe (token-keyed, last wins) so that pattern was kept for `embeddingProvider`/`generationProvider`. `AppModule` now wires `IngestionModule.register({http:true})` / `GenerationModule.register({http:true})` (its own bare `RetrievalModule` import removed as redundant) — `register()` is the single source of truth for both the standalone app and the embedded surface. `RetrievalService` gained an `@Optional` `RAG_RETRIEVAL_OPTIONS` token (k/minScore override, env-fallback unchanged). Prior: RAG-66b embeddable surface — `src/index.ts` barrel + `src/rag.module.ts` (`RagModule.forRoot()`), `package.json` importable (`private:false`, `main`/`types`/`exports`/`files`), `tsconfig` `declaration:true`.
 
 ---
 
@@ -16,9 +16,9 @@
 - **Used by:** package consumers via `main`/`types`/`exports` → `dist/index.js` (host `import { RagModule } from 'rag-knowledge-store'`)
 
 ### `src/rag.module.ts`
-- **Purpose:** The embeddable entry point (GO-21j / RAG-66b) — a host adds one import, `RagModule.forRoot()`, and gets the whole pipeline. Composes the existing feature modules and re-exports the three services; re-implements nothing. Env-first (typed override surface — `http`/`k`/`minScore`/provider — lands in RAG-66c).
-- **Defines:** `RagModule` (class) · `RagModule.forRoot(): DynamicModule`
-- **Imports (in forRoot):** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `GenerationModule`; **re-exports** `IngestionModule`/`RetrievalModule`/`GenerationModule`
+- **Purpose:** The embeddable entry point (GO-21j / RAG-66b/c) — a host adds one import, `RagModule.forRoot(options)`, and gets the whole pipeline. Composes the existing feature modules' `register()` statics and re-exports the two top-level ones; re-implements nothing. Env-first — every option is an independent, optional override.
+- **Defines:** `RagModule` (class) · `RagModule.forRoot(options?: RagModuleOptions): DynamicModule` · `RagModuleOptions` (interface: `embeddingProvider`, `generationProvider`, `k`, `minScore`, `http`)
+- **Imports (in forRoot):** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule.register(options.embeddingProvider)`, `VectorStoreModule`, `IngestionModule.register({http})`, `GenerationModule.register({generationProvider, http, retrieval:{k,minScore}})` — the `ingestionModule`/`generationModule` `DynamicModule` values are captured once and **exported by that same reference** (not the bare classes), so the re-export resolves against the exact configured instance
 - **Used by:** `src/index.ts` (barrel); a host `AppModule` (via the generated `src/rag/rag.module.ts`, RAG-66d)
 
 ### `src/main.ts`
@@ -42,7 +42,7 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
 - **Defines:** `AppModule` (class)
-- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `ObservabilityModule`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `GenerationModule`, `HealthModule`
+- **Imports:** `ConfigModule.forRoot({ isGlobal: true })`, `ObservabilityModule`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule.register({http:true})`, `GenerationModule.register({http:true})`, `HealthModule` (RAG-66c: Ingestion/Generation go through `register()`, not the bare class — no separate `RetrievalModule` import needed, `GenerationModule.register()` supplies its own)
 - **Used by:** `src/main.ts`
 
 ### `src/cli/main.ts`
@@ -87,20 +87,20 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 - **Used by:** `src/generation/generation.module.ts` (controller); route consumed by clients/UI
 
 ### `src/generation/generation.module.ts`
-- **Purpose:** Generation feature module — imports `RetrievalModule`; binds `GENERATION_PROVIDER` via an env-selected factory (`GENERATION_PROVIDER` env: `anthropic` default | `openai-compatible`). Constructs the Anthropic client locally inside the `anthropic` branch only — no client is built when a different provider is selected. **Exports `GenerationService`** (so `RagModule` can re-export it to a host, RAG-66).
-- **Defines:** `GenerationModule` (class) · `GENERATION_PROVIDER` factory (`useFactory`)
-- **Used by:** `src/app.module.ts`, `src/rag.module.ts` (re-exported)
+- **Purpose:** Generation feature module (RAG-66c). `@Module()` decorator carries **only** `GenerationService` + the default (env-only) `GENERATION_PROVIDER` factory — deliberately **no `imports`/`controllers`**, because Nest concatenates a class's static decorator metadata with a `DynamicModule`'s own `imports`/`controllers` rather than replacing them (confirmed via `@nestjs/core/scanner.js`'s `reflectImports`/`reflectControllers`); a decorator-level `imports:[RetrievalModule]` would sit alongside `register()`'s override-aware `RetrievalModule.register(options.retrieval)` as a second, differently-tokened instance, and DI would silently wire `GenerationService` to the wrong one (confirmed via a failing test before the fix — the decorator's plain-import instance won). `providers` concatenation is safe (Nest's provider map is keyed by token, last `.set()` wins) — that's what lets the `generationProvider` override on the *decorator-listed* `GENERATION_PROVIDER` factory work correctly. `register()` is therefore the **only** way this module is ever imported (`AppModule` included) — single source of truth.
+- **Defines:** `GenerationModule` (class) · `GenerationModule.register(options?: GenerationModuleOptions): DynamicModule` · `GenerationModuleOptions` (interface: `generationProvider`, `http`, `retrieval`) · `resolveGenerationProvider(config, override?)` · `GenerationProviderName` (type: `'anthropic' | 'openai-compatible'`)
+- **Used by:** `src/app.module.ts` (`.register({http:true})`), `src/rag.module.ts` (`.register({...})`, captured + re-exported by reference)
 
 ### `src/retrieval/retrieval.service.ts`
-- **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy (config); returns `[]` to enable abstain (D5). Observes the top-hit (pre-floor) score to `rag_retrieval_score` (RAG-63e).
-- **Defines:** `RetrievalService` (class) · `RetrievalService.retrieve(query): Promise<RetrievedChunk[]>` · `toNumber` (file-private)
-- **Depends on:** `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`RETRIEVAL_K`/`MIN_SCORE`), `MetricsService` (`@Optional`, RAG-63e)
+- **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy; env-driven, with an optional `RAG_RETRIEVAL_OPTIONS` override (RAG-66c, `RagModule.forRoot({k, minScore})`) taking precedence when bound. Returns `[]` to enable abstain (D5). Observes the top-hit (pre-floor) score to `rag_retrieval_score` (RAG-63e).
+- **Defines:** `RetrievalService` (class) · `RetrievalService.retrieve(query): Promise<RetrievedChunk[]>` · `RAG_RETRIEVAL_OPTIONS` (DI token) · `RagRetrievalOptions` (interface: `k`, `minScore`) · `toNumber` (file-private)
+- **Depends on:** `EMBEDDING_PROVIDER` (injected), `VECTOR_STORE` (injected), `ConfigService` (`RETRIEVAL_K`/`MIN_SCORE` fallback), `MetricsService` (`@Optional`, RAG-63e), `RAG_RETRIEVAL_OPTIONS` (`@Optional`, RAG-66c — unbound in the standalone app's plain `RetrievalModule`, so behavior there is unchanged)
 - **Used by:** `src/retrieval/retrieval.module.ts`; consumed by generation (RAG-27)
 
 ### `src/retrieval/retrieval.module.ts`
-- **Purpose:** Retrieval feature module — provides + exports `RetrievalService` (no controller; reached via `/query`).
-- **Defines:** `RetrievalModule` (class)
-- **Used by:** `src/app.module.ts`, `src/rag.module.ts` (re-exported)
+- **Purpose:** Retrieval feature module — provides + exports `RetrievalService` (no controller; reached via `/query`). `register(options)` (RAG-66c) additionally binds `RAG_RETRIEVAL_OPTIONS` when given — safe alongside the plain decorator usage since `providers` concatenation is token-keyed (no collision, unlike `imports`/`controllers`; see `generation.module.ts`).
+- **Defines:** `RetrievalModule` (class) · `RetrievalModule.register(options?: RagRetrievalOptions): DynamicModule`
+- **Used by:** `src/generation/generation.module.ts` (`.register()`, the sole importer — both the standalone app and `RagModule` reach `RetrievalService` through `GenerationModule`)
 
 ### `src/ingestion/ingestion.service.ts`
 - **Purpose:** The ingestion pipeline (RAG-16) — `load → chunk → embed → upsert`; thin orchestrator over the loader + the two adapter interfaces. Records `rag_ingest_docs_total` / `rag_ingest_chunks_total` (RAG-63e).
@@ -115,9 +115,9 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 - **Used by:** `src/ingestion/ingestion.module.ts` (controller); route consumed by clients
 
 ### `src/ingestion/ingestion.module.ts`
-- **Purpose:** Ingestion feature module — provides `IngestionService` + `DocumentLoader`, registers the controller, **exports `IngestionService`** (so `RagModule` can re-export it to a host, RAG-66).
-- **Defines:** `IngestionModule` (class)
-- **Used by:** `src/app.module.ts`, `src/rag.module.ts` (re-exported)
+- **Purpose:** Ingestion feature module (RAG-66c). `@Module()` decorator carries `IngestionService`/`DocumentLoader` + `exports` only — deliberately **no `controllers`** (same `imports`/`controllers`-concatenation reasoning as `generation.module.ts`); `register()` is the only place `IngestionController` is registered, gated by the `http` option.
+- **Defines:** `IngestionModule` (class) · `IngestionModule.register(options?: {http?: boolean}): DynamicModule`
+- **Used by:** `src/app.module.ts` (`.register({http:true})`), `src/rag.module.ts` (`.register({http})`, captured + re-exported by reference)
 
 ### `src/ingestion/document-loader.ts`
 - **Purpose:** Load a corpus (file or dir) into `LoadedDocument[]` (RAG-14). Handles `.md`/`.txt`, skips others; PDF is a later slice.
@@ -173,11 +173,11 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 - **Used by:** `src/embedding/embedding.module.ts` (factory, `case 'transformers'`)
 
 ### `src/embedding/embedding.module.ts`
-- **Purpose:** Global module — binds `EMBEDDING_PROVIDER` token to the impl selected by `EMBEDDING_PROVIDER` env (factory, RAG-11).
-- **Defines:** `EmbeddingModule` (class, `@Global`) · provider factory (`useFactory` → `EMBEDDING_PROVIDER`: `voyage` → `VoyageEmbeddingProvider` | `transformers` → `TransformersEmbeddingProvider`)
+- **Purpose:** Global module — binds `EMBEDDING_PROVIDER` token to the impl selected by `EMBEDDING_PROVIDER` env (factory, RAG-11). `register(override)` (RAG-66c) is the `RagModule.forRoot({embeddingProvider})` seam: a concrete `EmbeddingProvider` instance is used as-is, a name picks that impl, `undefined` falls back to env — same factory logic (`resolveEmbeddingProvider`) either way. The returned `DynamicModule` sets `global:true` explicitly — the class's own `@Global()` only applies to the plain (decorator) usage; a dynamically-returned module must opt back in for cross-module token visibility (Ingestion/Retrieval never import EmbeddingModule directly).
+- **Defines:** `EmbeddingModule` (class, `@Global`) · `EmbeddingModule.register(override?: EmbeddingProviderName | EmbeddingProvider): DynamicModule` · `resolveEmbeddingProvider(config, override?)` · `EmbeddingProviderName` (type: `'voyage' | 'transformers'`)
 - **Exports:** `EMBEDDING_PROVIDER`
 - **Depends on:** `ConfigService`, `VoyageEmbeddingProvider`, `TransformersEmbeddingProvider`
-- **Used by:** `src/app.module.ts` (import); token injected by ingestion/retrieval in later milestones
+- **Used by:** `src/app.module.ts` (plain import); `src/rag.module.ts` (`.register(options.embeddingProvider)`)
 
 ### `src/database/database.module.ts`
 - **Purpose:** Global Postgres connection pool (the `VectorStore` seam will attach here in GO-21b).

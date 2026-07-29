@@ -8,6 +8,7 @@
 
 // The one import a host adds — composes the pipeline, re-exports the services.
 export { RagModule } from './rag.module';
+export type { RagModuleOptions } from './rag.module';
 
 // The three pipeline services, injectable in the host once RagModule is imported.
 export { IngestionService } from './ingestion/ingestion.service';
