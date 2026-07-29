@@ -18,6 +18,32 @@
   min-width: 0;
 }
 
+.app-header__burger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  transition:
+    color var(--dur-micro) var(--ease),
+    background var(--dur-micro) var(--ease),
+    border-color var(--dur-micro) var(--ease);
+}
+
+.app-header__burger:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.app-header__burger[aria-expanded='true'] {
+  color: var(--accent);
+}
+
 .app-header__mark {
   color: var(--accent);
   font-size: var(--fs-lead);

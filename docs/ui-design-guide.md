@@ -83,8 +83,12 @@ gracefully responsive (§7).
 └───────────────────────────────────────────────────────────────┘
 ```
 
-- **Header** — product name, a provider/citation **status badge** (from `citationsSupported`),
-  theme toggle. Nothing else.
+- **Header** — a **history burger** (far left), product name, a provider/citation **status badge**
+  (from `citationsSupported`), theme toggle.
+- **History drawer** *(added 2026-07-29 — see §8)* — a **collapsible left drawer**, collapsed by
+  default, toggled by the header burger. Lists past questions (persisted across reloads), with
+  "New question", per-item remove, and clear-all; selecting one shows that exchange. It overlays
+  the shell (backdrop + Esc close) so the centered single column is unchanged when closed.
 - **Conversation** — alternating user/assistant messages; the answer message owns the citation
   markers and the Sources panel.
 - **Sources panel** — per-answer, collapsed by default, expands to the `chunks[]` list with
@@ -165,6 +169,7 @@ Build in this order (mirrors the task ladder in `subtasks/GO-21e.md`). Each is s
 | `Composer` | Textarea + submit; `⌘/Ctrl+Enter`; disabled while loading | controlled input |
 | `LoadingAnswer` | Skeleton / animated caret while awaiting `/query` | shimmer, reduced-motion aware |
 | `EmptyState` | First load: one-line intro + 2–3 example questions | seeds the <60s path |
+| `HistoryDrawer` | Collapsible left drawer: past questions (persisted), New/remove/clear | collapsed by default; header burger toggles; overlay + Esc (added 2026-07-29) |
 
 ---
 
@@ -236,8 +241,15 @@ Desktop-first, but must not break on a phone (the demo link gets opened on mobil
 - **Screen readers:** answer region `aria-live="polite"` so a completed answer is announced;
   citation markers labelled `"citation N, source <file>"`.
 
-> **Explicitly deferred (even at full polish):** token-by-token streaming, message history
-> persistence, auth, multi-corpus switching, i18n. Streaming stays out (matches `PRD §2`
+> **Question history — now in scope (revised 2026-07-29).** Originally deferred, but reinstated
+> for the portfolio demo: a persisted (localStorage) history of past questions in a collapsible
+> left drawer (§2, §4). This is a **navigable list of independent Q&As**, not multi-turn chat
+> memory — the backend `/query` stays single-shot and stateless; the drawer only re-displays a
+> stored `QueryResult`. It does **not** reintroduce conversation memory, server-side sessions, or
+> multi-corpus switching.
+>
+> **Still explicitly deferred (even at full polish):** token-by-token streaming, multi-turn
+> conversation memory, auth, multi-corpus switching, i18n. Streaming stays out (matches `PRD §2`
 > non-goals and keeps the request model simple); a `LoadingAnswer` caret gives the *feel* of
 > responsiveness without a streaming endpoint.
 
@@ -245,9 +257,11 @@ Desktop-first, but must not break on a phone (the demo link gets opened on mobil
 
 ## 9. Tech & integration
 
-- **App:** React 18 + Vite + TypeScript under `web/`. State via `useReducer` (no Redux needed —
-  the app is one query flow). Deps kept lean: `lucide-react` (icons), `@radix-ui/react-popover`
-  (accessible citations). Tailwind optional for token wiring; plain CSS variables are fine.
+- **App:** React 18 + Vite + TypeScript under `web/`. State via `useReducer` — a list of
+  `Exchange`es (question + `QueryResult`/error) + the active id; the history is persisted to
+  `localStorage` and the active render branch is *derived* (`phaseOf`), not stored. Deps kept
+  lean: `lucide-react` (icons), `@radix-ui/react-popover` (accessible citations). Tailwind
+  optional for token wiring; plain CSS variables are fine.
 - **Types:** mirror the server contract in `web/src/types.ts` (`QueryResult`, `Citation`,
   `RetrievedChunk`) — keep it in lockstep with `src/generation/generation.service.ts`. A single
   typed `fetchQuery(question): Promise<QueryResult>` wrapper is the only network surface.

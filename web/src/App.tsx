@@ -1,26 +1,43 @@
-import { useCallback, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { EmptyState } from './components/EmptyState';
+import { HistoryDrawer } from './components/HistoryDrawer';
 import { fetchQuery, QueryError } from './api';
-import { initialState, reducer } from './state';
+import {
+  activeExchange,
+  init,
+  phaseOf,
+  reducer,
+  saveHistory,
+  type Exchange,
+  type Phase,
+} from './state';
 import './interim.css';
 
 /**
- * GO-21e-c wires the AppShell (tokens, header, composer, empty state) around a
- * `useReducer` query flow. The designed Conversation / AnswerBody / SourcesPanel
- * and the four state cards land in GO-21e-d…f; until then the non-empty phases
- * render the clearly-marked interim view below so the flow stays functional.
+ * Wires the AppShell + a persisted history of questions (decision 2026-07-29,
+ * guide §2/§8) around a `useReducer` query flow. The designed Conversation /
+ * AnswerBody / SourcesPanel and the four state cards land in GO-21e-d…f; until
+ * then the non-empty phases render the clearly-marked interim view below.
  */
 export default function App() {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, init);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Persist the history whenever it changes (completed exchanges only).
+  useEffect(() => {
+    saveHistory(state.history);
+  }, [state.history]);
 
   const submit = useCallback(async (question: string) => {
-    dispatch({ type: 'submit', question });
+    const id = crypto.randomUUID();
+    dispatch({ type: 'submit', id, question });
     try {
-      dispatch({ type: 'success', result: await fetchQuery(question) });
+      dispatch({ type: 'success', id, result: await fetchQuery(question) });
     } catch (err) {
       dispatch({
         type: 'failure',
+        id,
         error:
           err instanceof QueryError
             ? { message: err.message, correlationId: err.correlationId }
@@ -29,44 +46,70 @@ export default function App() {
     }
   }, []);
 
-  const citationsSupported = state.result?.citationsSupported ?? null;
+  const active = activeExchange(state);
+  const phase = phaseOf(active);
+  const citationsSupported = active?.result?.citationsSupported ?? null;
 
   return (
-    <AppShell
-      citationsSupported={citationsSupported}
-      onSubmit={submit}
-      busy={state.phase === 'loading'}
-    >
-      {state.phase === 'empty' ? <EmptyState onPick={submit} /> : <InterimResult state={state} />}
-    </AppShell>
+    <>
+      <HistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        history={state.history}
+        activeId={state.activeId}
+        onSelect={(id) => {
+          dispatch({ type: 'select', id });
+          setHistoryOpen(false);
+        }}
+        onNewChat={() => {
+          dispatch({ type: 'newChat' });
+          setHistoryOpen(false);
+        }}
+        onRemove={(id) => dispatch({ type: 'remove', id })}
+        onClear={() => dispatch({ type: 'clear' })}
+      />
+      <AppShell
+        citationsSupported={citationsSupported}
+        onSubmit={submit}
+        busy={phase === 'loading'}
+        historyOpen={historyOpen}
+        onToggleHistory={() => setHistoryOpen((o) => !o)}
+      >
+        {active === null ? (
+          <EmptyState onPick={submit} />
+        ) : (
+          <InterimResult exchange={active} phase={phase} />
+        )}
+      </AppShell>
+    </>
   );
 }
 
 /** Placeholder result view — replaced by the designed components in GO-21e-d…f. */
-function InterimResult({ state }: { state: ReturnType<typeof reducer> }) {
+function InterimResult({ exchange, phase }: { exchange: Exchange; phase: Phase }) {
+  const { question, result, error } = exchange;
   return (
     <div className="interim">
-      {state.question && <p className="interim__question">{state.question}</p>}
+      <p className="interim__question">{question}</p>
 
-      {state.phase === 'loading' && <p className="interim__meta">Retrieving &amp; generating…</p>}
+      {phase === 'loading' && <p className="interim__meta">Retrieving &amp; generating…</p>}
 
-      {(state.phase === 'answered' || state.phase === 'abstained') && state.result && (
+      {(phase === 'answered' || phase === 'abstained') && result && (
         <>
-          <p className="interim__answer">{state.result.answer}</p>
+          <p className="interim__answer">{result.answer}</p>
           <p className="interim__meta">
-            {state.phase === 'abstained' ? 'abstained · ' : ''}
-            {state.result.citations.length} citation
-            {state.result.citations.length === 1 ? '' : 's'} · {state.result.chunks.length} chunk
-            {state.result.chunks.length === 1 ? '' : 's'}
-            {!state.result.citationsSupported && ' · citations unsupported'}
+            {phase === 'abstained' ? 'abstained · ' : ''}
+            {result.citations.length} citation{result.citations.length === 1 ? '' : 's'} ·{' '}
+            {result.chunks.length} chunk{result.chunks.length === 1 ? '' : 's'}
+            {!result.citationsSupported && ' · citations unsupported'}
           </p>
         </>
       )}
 
-      {state.phase === 'error' && state.error && (
+      {phase === 'error' && error && (
         <p className="interim__error">
-          {state.error.message}
-          {state.error.correlationId ? ` (trace: ${state.error.correlationId})` : ''}
+          {error.message}
+          {error.correlationId ? ` (trace: ${error.correlationId})` : ''}
         </p>
       )}
     </div>

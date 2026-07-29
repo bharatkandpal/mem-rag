@@ -21,11 +21,13 @@
 | GO-21e-f | **Render citations + Sources** — inline numbered markers + accessible `CitationPopover` (`citedText`/`source`, mapped via `documentIndex`) and a collapsible `SourcesPanel` (`chunks[]` + `ScoreBar`) | Clicking a citation reveals its source span and highlights the matching chunk; sources list shows every retrieved chunk with score | GO-21e-d · **satisfies RAG-32** |
 | GO-21e-g | **Serve the built UI from Nest** — `vite build` → `@nestjs/serve-static`, same-origin (no CORS), inside Docker | `docker compose up` serves the UI at `/` querying the same-origin API; cold-start → cited answer <60s; one-command run intact | GO-21e-d · **satisfies RAG-33** |
 | GO-21e-h | **Full-polish + a11y pass** — motion budget (reduced-motion aware), focus rings, keyboard nav, AA contrast, responsive/mobile check, observability correlation-id surfacing (RAG-63) | Keyboard-only flow works, `prefers-reduced-motion` honored, AA verified in both themes, correlation id shown on error | GO-21e-e, GO-21e-f |
+| GO-21e-i | **History drawer** *(added 2026-07-29 by user request)* — collapsible left drawer (burger-toggled, collapsed by default) with a **persisted** (localStorage) list of past questions: New/select/remove/clear; `state.ts` reworked to a `history: Exchange[]` + `activeId` model, render branch derived (`phaseOf`) | Burger opens/closes the drawer; asking questions builds a history that survives reload; selecting one shows its answer; clear/remove work | GO-21e-c — *(done 2026-07-29)* |
 
 **Open decisions:** none blocking. Stack (React+Vite) and polish level (full) are decided.
-The one hard **gate** is RAG-63 (observability) before GO-21e-b onward — not a decision, a
-dependency. Streaming tokens, history persistence, auth, and multi-corpus switching are
-explicitly out of scope even at full polish (see guide §8).
+The one hard **gate** was RAG-63 (observability) before GO-21e-b onward — lifted 2026-07-28.
+**Scope revisit (2026-07-29):** question-history *persistence* was pulled back **into** scope
+(GO-21e-i, guide §2/§4/§8) as a navigable list of independent Q&As — *not* multi-turn chat
+memory. Streaming tokens, conversation memory, auth, and multi-corpus switching stay out.
 
 **Start here:** GO-21e-a (design guide) and GO-21e-b (`web/` scaffold — React + Vite + TS,
 dev proxy, typed `fetchQuery`, `types.ts` mirroring the contract) are **done** (2026-07-29).
