@@ -63,7 +63,7 @@
 >
 > 🧭 **Sliced 2026-07-23** → [`subtasks/GO-21e.md`](subtasks/GO-21e.md) (RAG-31/32/33 re-cut into GO-21e-a…h). **Stack: React + Vite + TS; polish: full** (a deliberate revisit of the PRD "no UI polish" non-goal for the portfolio demo). Design guide: [`docs/ui-design-guide.md`](docs/ui-design-guide.md). GO-21e-b/c/i + d **done 2026-07-29** (scaffold, tokens+`AppShell`, persisted history drawer, and the query happy path — `Conversation`/`AnswerBody`/`LoadingAnswer`, satisfies RAG-31; live grounded-answer run still pending a backend). Next actionable = **GO-21e-e (honest states: AbstainCard/ErrorState/CapabilityNote).**
 
-- [~] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7 → **code-complete via GO-21e-d** (composer → `/query` → `Conversation`/`AnswerBody` + `LoadingAnswer`; typecheck/lint/build green, dev-server HMR-verified). Live grounded-answer run against a backend still pending.
+- [x] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7 → **done via GO-21e-d** (composer → `/query` → `Conversation`/`AnswerBody` + `LoadingAnswer`). **Live-verified 2026-07-29** against the key-free stack (UI :5173 proxy → app :3000): grounded answer over the sample corpus (`grounded:true`, `citationsSupported:false` on local qwen) + abstain path both render.
 - [ ] RAG-32 — Render answer + clickable citations  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-f)
 - [ ] RAG-33 — Serve the static UI from Nest  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-g)
 
