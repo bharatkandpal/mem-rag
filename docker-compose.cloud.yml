@@ -20,13 +20,26 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./db/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # One-shot schema migration (RAG-46) — single schema authority, replacing the
+  # initdb-only bootstrap. Applies pending db/migrations/*.sql via the ledger, then
+  # exits. Idempotent; seed + app wait for it. Needs no keys (schema only).
+  migrate:
+    build: .
+    image: rag:local
+    command: ["dist/database/migrate.js"]
+    environment:
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   # One-shot first-boot seed (RAG-67d) — ingest eval/sample-corpus with Voyage embeddings
   # so /query answers on a fresh boot. Idempotent (upsert on UNIQUE(doc_id, chunk_index)).
@@ -44,6 +57,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: "no"
 
   app:

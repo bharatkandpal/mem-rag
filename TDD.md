@@ -93,7 +93,8 @@ Single static page (or minimal React) hitting `/query`; renders answer + clickab
 
 ## 4. Deployment (FR-7)
 
-- `docker-compose.yml`: `app` + `db` (pgvector image). `docker compose up` → migrations run → API on a fixed port.
+- `docker-compose.yml`: `db` (pgvector image) + a one-shot `migrate` service + `app`. `docker compose up` → migrations run → API on a fixed port.
+- **Migration runner (RAG-46):** `src/database/migrate.ts` (`npm run migrate` / `dist/database/migrate.js`) applies every pending `db/migrations/*.sql` in order, each transactionally, tracking applied versions in a `schema_migrations` ledger. Idempotent and the single schema authority — it replaces the initdb-only bootstrap, which never re-ran on existing volumes and didn't cover managed Postgres. Runs as a step before the app (compose `migrate` service; a k8s Job/init-container for RAG-64). Migrations are the append-only `db/migrations/00X_<change>.sql` files (see the `db-migration` skill; mind the pgvector dims trap).
 - Public URL (GO-21f): a container host (Fly.io / Render / Railway) + managed Postgres-with-pgvector, or a small VM.
 
 ## 5. Build order

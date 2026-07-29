@@ -18,6 +18,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+# Schema migrations applied by the runner (dist/database/migrate.js, RAG-46).
+# Baked in so the deploy image is self-contained — the compose `migrate` service
+# and a k8s Job/init-container (RAG-64) run it with no repo checkout.
+COPY db/migrations ./db/migrations
 # Static chat UI served by main.ts (useStaticAssets → ../web/public).
 COPY web/public ./web/public
 # Local (transformers.js) embeddings cache their weights here — node_modules is

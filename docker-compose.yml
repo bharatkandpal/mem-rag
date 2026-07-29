@@ -35,13 +35,27 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./db/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # One-shot schema migration (RAG-46) — the single schema authority, replacing the
+  # initdb-only bootstrap (which never re-runs on an existing volume). Applies every
+  # pending db/migrations/*.sql via the ledger, then exits. Idempotent, so it's safe
+  # on every `up`. seed + app wait for it to complete.
+  migrate:
+    build: .
+    image: rag:local
+    command: ["dist/database/migrate.js"]
+    environment:
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   # Bundled local LLM server — no host Ollama, no keys (RAG-67b).
   ollama:
@@ -86,6 +100,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: "no"
 
   app:

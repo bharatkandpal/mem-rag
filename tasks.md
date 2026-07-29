@@ -11,7 +11,7 @@
 - [x] RAG-1 — NestJS + TypeScript project (`package.json`, `tsconfig`, `nest-cli`)  · TDD §1
 - [x] RAG-2 — Global config via `@nestjs/config` (env-driven)  · TDD §3
 - [x] RAG-3 — Postgres `pg` Pool as injectable `PG_POOL`  · TDD §2.2
-- [x] RAG-4 — `db/init/001_init.sql`: `vector` extension + `chunks` table + HNSW index  · TDD §2.2
+- [x] RAG-4 — `vector` extension + `chunks` table + HNSW index  · TDD §2.2 — now `db/migrations/001_init.sql` (moved from `db/init/`, applied by the RAG-46 migration runner)
 - [x] RAG-5 — `GET /healthz` (DB reachable + pgvector present → 200/503)  · TDD §2.6
 - [x] RAG-6 — Dockerfile + `docker-compose.yml` (app + pgvector), `.dockerignore`  · TDD §4
 - [x] RAG-7 — `.env.example` with all keys  · TDD §3
@@ -122,7 +122,7 @@
 - [x] RAG-43 — Secrets env-only; confirm none committed/logged  · rule `ai-and-secrets.md` — audited: `.env` git-ignored + never tracked; no key patterns in tracked files; no keys in logger calls
 - [x] RAG-44 — Jest setup + unit tests (chunking, adapters)  · TDD §3 — chunker, loader, Voyage adapter, pgvector store, retrieval, generation + eval-metrics specs all in place
 - [x] RAG-45 — Integration test: `/query` happy path  · TDD §3 — full DI graph over HTTP (supertest); happy path + abstain (provider never called) + 400 validation; process-boundary adapters replaced at their tokens
-- [ ] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4
+- [x] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4 — `src/database/migrate.ts` (`npm run migrate` / `dist/database/migrate.js`): applies pending `db/migrations/*.sql` in order, each transactional (DDL + ledger insert commit atomically), tracked in a `schema_migrations` ledger; idempotent, single schema authority. Schema moved `db/init/001_init.sql` → `db/migrations/001_init.sql`; initdb mount replaced by a one-shot compose `migrate` service (both compose files) that seed+app wait on; baked into the image (Dockerfile `COPY db/migrations`) for k8s (RAG-64). Smoke-verified on a fresh volume: applied 001, created chunks+HNSW+ledger, second run "up to date", exit 0. Unblocks RAG-64 / RAG-66e.
 - [ ] RAG-47 — Pin deps / lockfile committed; clean commit history  · PRD §5
 - [~] RAG-50 — Keep `doc/codemap.md` current after every code change (ongoing)  · rule `coding-standards.md`, `codemap` skill
 - [~] RAG-51 — Append to `doc/LEARNINGS.md` after each build slice (ongoing)  · the revisit/teach log, distinct from ADRs

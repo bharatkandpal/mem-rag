@@ -164,6 +164,12 @@
 - **Depends on:** `ConfigService`, `Pool` (`pg`)
 - **Used by:** `src/app.module.ts` (import) · `src/health/health.controller.ts` (injects `PG_POOL`)
 
+### `src/database/migrate.ts`
+- **Purpose:** Standalone schema migration runner (RAG-46) — the single schema authority, replacing the initdb-only bootstrap. Applies every pending `db/migrations/*.sql` in lexicographic order, each in its own transaction (DDL + ledger insert commit atomically), tracking applied versions in the `schema_migrations` ledger. Idempotent. Run via `npm run migrate` (`node dist/database/migrate.js`), the compose `migrate` one-shot service, or a k8s Job/init-container (RAG-64). No NestFactory — a plain `pg` `Pool` reading `DATABASE_URL`.
+- **Defines:** `MIGRATIONS_TABLE` (const) · `migrationsDir(): string` (env `MIGRATIONS_DIR` override) · `Migration` (interface) · `readMigrations(dir): Migration[]` · `pendingMigrations(all, applied): Migration[]` · `migrate(pool, logger): Promise<Migration[]>` · `main()` (guarded by `require.main === module`)
+- **Depends on:** `Pool` (`pg`), `Logger` (`@nestjs/common`), `node:fs` · reads `db/migrations/*.sql`
+- **Used by:** — (entrypoint; `npm run migrate` · compose `migrate` service) · unit test `src/database/migrate.spec.ts`
+
 ### `src/health/health.module.ts`
 - **Purpose:** Health feature module.
 - **Defines:** `HealthModule` (class)
@@ -253,6 +259,8 @@
 | `AppModule` | class | `src/app.module.ts` | `src/main.ts` |
 | `DatabaseModule` | class | `src/database/database.module.ts` | `src/app.module.ts` |
 | `PG_POOL` | DI token | `src/database/database.module.ts` | `src/health/health.controller.ts` |
+| `migrate` | function | `src/database/migrate.ts` | self (entrypoint) · `src/database/migrate.spec.ts` |
+| `readMigrations` / `pendingMigrations` | function | `src/database/migrate.ts` | `src/database/migrate.spec.ts` |
 | `EmbeddingProvider` | interface | `src/embedding/embedding-provider.interface.ts` | voyage + transformers providers, embedding module, ingestion, retrieval |
 | `EMBEDDING_PROVIDER` | DI token | `src/embedding/embedding-provider.interface.ts` | `src/embedding/embedding.module.ts` |
 | `VoyageEmbeddingProvider` | class | `src/embedding/voyage-embedding.provider.ts` | `src/embedding/embedding.module.ts` |
@@ -324,7 +332,8 @@
 |-----|---------|---------|
 | `PORT` | `src/main.ts` | 3000 |
 | `METRICS_ENABLED` | `src/observability/metrics.service.ts` (gates `/metrics` route + default collectors) | true |
-| `DATABASE_URL` | `src/database/database.module.ts` | — |
+| `DATABASE_URL` | `src/database/database.module.ts` · `src/database/migrate.ts` (migration runner) | — |
+| `MIGRATIONS_DIR` | `src/database/migrate.ts` (override migrations dir) | `<app>/db/migrations` (relative to `dist/database`) |
 | `ANTHROPIC_API_KEY` | `src/generation/generation.module.ts` (factory, `anthropic` branch only) | — |
 | `GENERATION_PROVIDER` | `src/generation/generation.module.ts` (factory selection) | anthropic |
 | `GENERATION_MODEL` | `src/generation/generation.module.ts` (factory → provider ctor) | claude-opus-4-8 (anthropic) |
@@ -346,8 +355,8 @@
 
 | File | Consumed by | Purpose |
 |------|-------------|---------|
-| `db/init/001_init.sql` | `docker-compose.yml` (db initdb mount) | `vector` extension + `chunks` table + HNSW index |
-| `docker-compose.yml` | `docker compose up` | app + pgvector services |
+| `db/migrations/001_init.sql` | `src/database/migrate.ts` (migration runner, RAG-46) | `vector` extension + `chunks` table + HNSW index (first migration; single schema authority) |
+| `docker-compose.yml` | `docker compose up` | db + migrate (one-shot) + ollama + seed + app services |
 | `Dockerfile` | `docker-compose.yml` (app build) | build/run the Nest app |
 | `eval/dataset.jsonl` | `eval/run-eval.ts` · `eval/probe-scores.ts` | labeled eval set (`question` → `relevant_doc_ids[]`; empty = should abstain) |
 | `eval/sample-corpus/` | `POST /ingest` before an eval run | **frozen** fixture corpus the dataset labels are tied to (rule `evals.md`) |
