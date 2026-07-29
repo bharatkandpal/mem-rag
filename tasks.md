@@ -61,7 +61,7 @@
 
 > ✅ **Gate lifted 2026-07-28 — RAG-63 (observability framework) landed.** The user-facing surface now has request tracing / metrics / error surfacing behind it (correlation id is surfaced in the error body for the UI's `ErrorState`, GO-21e-h). UI is low-effort (the `/query` contract already returns `{answer, citations[], chunks[], citationsSupported}`).
 >
-> 🧭 **Sliced 2026-07-23** → [`subtasks/GO-21e.md`](subtasks/GO-21e.md) (RAG-31/32/33 re-cut into GO-21e-a…h). **Stack: React + Vite + TS; polish: full** (a deliberate revisit of the PRD "no UI polish" non-goal for the portfolio demo). Design guide: [`docs/ui-design-guide.md`](docs/ui-design-guide.md). Next actionable = **GO-21e-b (scaffold `web/`) — now unblocked.**
+> 🧭 **Sliced 2026-07-23** → [`subtasks/GO-21e.md`](subtasks/GO-21e.md) (RAG-31/32/33 re-cut into GO-21e-a…h). **Stack: React + Vite + TS; polish: full** (a deliberate revisit of the PRD "no UI polish" non-goal for the portfolio demo). Design guide: [`docs/ui-design-guide.md`](docs/ui-design-guide.md). GO-21e-b (`web/` scaffold — React+Vite+TS, dev proxy, typed `fetchQuery`, `types.ts` mirroring the contract) **done 2026-07-29**. Next actionable = **GO-21e-c (design tokens + `AppShell`).**
 
 - [ ] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-d)
 - [ ] RAG-32 — Render answer + clickable citations  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-f)
