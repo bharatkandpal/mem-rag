@@ -29,8 +29,18 @@
   color: var(--text);
   line-height: 1.5;
   padding: var(--space-1) var(--space-1);
-  outline: none;
   overflow-y: auto;
+}
+
+/*
+ * The composer *wrapper* shows focus (border + ring via `:focus-within`), so
+ * suppress the textarea's own focus ring — otherwise you get a double boundary
+ * (inner outline + outer wrapper ring). Higher specificity than the global
+ * `:where(...):focus-visible` rule so it wins regardless of import order.
+ */
+.composer__input:focus,
+.composer__input:focus-visible {
+  outline: none;
 }
 
 .composer__input::placeholder {
