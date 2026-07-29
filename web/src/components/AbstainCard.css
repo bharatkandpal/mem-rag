@@ -1,0 +1,36 @@
+.abstain {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  max-width: var(--measure);
+  border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
+  border-radius: var(--r-md);
+  background: var(--info-subtle);
+}
+
+.abstain__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+}
+
+.abstain__body {
+  min-width: 0;
+}
+
+.abstain__title {
+  margin: 2px 0 var(--space-1);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.abstain__text {
+  margin: 0;
+  color: var(--text-secondary);
+}

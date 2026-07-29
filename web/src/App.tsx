@@ -21,9 +21,7 @@ export default function App() {
     saveHistory(state.history);
   }, [state.history]);
 
-  const submit = useCallback(async (question: string) => {
-    const id = crypto.randomUUID();
-    dispatch({ type: 'submit', id, question });
+  const runQuery = useCallback(async (id: string, question: string) => {
     try {
       dispatch({ type: 'success', id, result: await fetchQuery(question) });
     } catch (err) {
@@ -37,6 +35,23 @@ export default function App() {
       });
     }
   }, []);
+
+  const submit = useCallback(
+    (question: string) => {
+      const id = crypto.randomUUID();
+      dispatch({ type: 'submit', id, question });
+      void runQuery(id, question);
+    },
+    [runQuery],
+  );
+
+  const retry = useCallback(
+    (id: string, question: string) => {
+      dispatch({ type: 'retry', id });
+      void runQuery(id, question);
+    },
+    [runQuery],
+  );
 
   const active = activeExchange(state);
   const phase = phaseOf(active);
@@ -70,7 +85,7 @@ export default function App() {
         {active === null ? (
           <EmptyState onPick={submit} />
         ) : (
-          <Conversation exchange={active} phase={phase} />
+          <Conversation exchange={active} phase={phase} onRetry={retry} />
         )}
       </AppShell>
     </>

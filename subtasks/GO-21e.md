@@ -17,7 +17,7 @@
 | GO-21e-b | **Scaffold `web/` (React + Vite + TS)** — Vite dev proxy `/query` → Nest, lint/format, `web/src/types.ts` mirroring the `QueryResult` contract, one typed `fetchQuery()` | `npm run dev` in `web/` serves a shell that can call `/query` in dev; types compile against the server contract | RAG-63 (gate) — *(done 2026-07-29)* |
 | GO-21e-c | **Implement design tokens + `AppShell`** — CSS vars for both themes, type/spacing scale, `Header` + `StatusBadge` + `Composer` + `EmptyState` per the guide | Empty shell matches the guide's layout at desktop + mobile, light + dark; composer autofocused, `⌘/Ctrl+Enter` wired | GO-21e-a, GO-21e-b — *(done 2026-07-29)* |
 | GO-21e-d | **Build the query happy path** — composer → `POST /query` → render `answer`; `LoadingAnswer` skeleton/caret while in flight | Asking a question returns and renders a grounded answer with no layout shift | GO-21e-c · **satisfies RAG-31** — *(done + live-verified 2026-07-29 against the key-free stack)* |
-| GO-21e-e | **Render the honest states** — `AbstainCard` (`--info`, verbatim message), `ErrorState` (`--danger`, retry), `CapabilityNote` when `!citationsSupported` | All four §6 branches + loading/error render distinctly; abstain is not styled as an error | GO-21e-d |
+| GO-21e-e | **Render the honest states** — `AbstainCard` (`--info`, verbatim message), `ErrorState` (`--danger`, retry), `CapabilityNote` when `!citationsSupported` | All four §6 branches + loading/error render distinctly; abstain is not styled as an error | GO-21e-d — *(code-complete 2026-07-29; typecheck/lint/build green — live visual check pending a stack run)* |
 | GO-21e-f | **Render citations + Sources** — inline numbered markers + accessible `CitationPopover` (`citedText`/`source`, mapped via `documentIndex`) and a collapsible `SourcesPanel` (`chunks[]` + `ScoreBar`) | Clicking a citation reveals its source span and highlights the matching chunk; sources list shows every retrieved chunk with score | GO-21e-d · **satisfies RAG-32** |
 | GO-21e-g | **Serve the built UI from Nest** — `vite build` → `@nestjs/serve-static`, same-origin (no CORS), inside Docker | `docker compose up` serves the UI at `/` querying the same-origin API; cold-start → cited answer <60s; one-command run intact | GO-21e-d · **satisfies RAG-33** |
 | GO-21e-h | **Full-polish + a11y pass** — motion budget (reduced-motion aware), focus rings, keyboard nav, AA contrast, responsive/mobile check, observability correlation-id surfacing (RAG-63) | Keyboard-only flow works, `prefers-reduced-motion` honored, AA verified in both themes, correlation id shown on error | GO-21e-e, GO-21e-f |
@@ -32,6 +32,7 @@ memory. Streaming tokens, conversation memory, auth, and multi-corpus switching 
 **Start here:** GO-21e-a/b/c/i are **done** (2026-07-29): design guide, `web/` scaffold, design
 tokens + `AppShell` (both themes, autofocus + ⌘/Ctrl+Enter), and the persisted history drawer.
 **GO-21e-d** (query happy path — `Conversation`/`Message`/`AnswerBody`/`LoadingAnswer`; satisfies
-RAG-31) is **code-complete** (2026-07-29); a live grounded-answer run against a backend still
-needs doing. The next actionable move is **GO-21e-e** (the honest states — `AbstainCard`,
-`ErrorState`, `CapabilityNote`).
+RAG-31) is **done + live-verified** (2026-07-29). **GO-21e-e** (honest states — `AbstainCard`,
+`ErrorState` with retry, `CapabilityNote`) is **code-complete** (2026-07-29; build green, live
+visual check pending). The next actionable move is **GO-21e-f** (citation markers + `SourcesPanel`
+— the headline citation UX; satisfies RAG-32).

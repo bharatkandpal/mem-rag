@@ -82,6 +82,7 @@ export function init(): AppState {
 
 export type Action =
   | { type: 'submit'; id: string; question: string }
+  | { type: 'retry'; id: string }
   | { type: 'success'; id: string; result: QueryResult }
   | { type: 'failure'; id: string; error: QueryError }
   | { type: 'select'; id: string }
@@ -102,6 +103,15 @@ export function reducer(state: AppState, action: Action): AppState {
       };
       return { history: [ex, ...state.history], activeId: action.id };
     }
+    case 'retry':
+      // Re-run an existing exchange in place (no duplicate history entry).
+      return {
+        ...state,
+        activeId: action.id,
+        history: state.history.map((e) =>
+          e.id === action.id ? { ...e, pending: true, result: null, error: null } : e,
+        ),
+      };
     case 'success':
       return {
         ...state,
