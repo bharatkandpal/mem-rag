@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { Exchange, Phase } from '../state';
 import { Message } from './Message';
-import { AnswerBody } from './AnswerBody';
+import { AnswerView } from './AnswerView';
 import { LoadingAnswer } from './LoadingAnswer';
 import { AbstainCard } from './AbstainCard';
-import { CapabilityNote } from './CapabilityNote';
 import { ErrorState } from './ErrorState';
 import './Conversation.css';
 
@@ -40,12 +39,7 @@ export function Conversation({ exchange, phase, onRetry }: ConversationProps) {
 
         {phase === 'abstained' && result && <AbstainCard message={result.answer} />}
 
-        {phase === 'answered' && result && (
-          <>
-            <AnswerBody answer={result.answer} />
-            {!result.citationsSupported && <CapabilityNote />}
-          </>
-        )}
+        {phase === 'answered' && result && <AnswerView result={result} />}
 
         {phase === 'error' && exchange.error && (
           <ErrorState

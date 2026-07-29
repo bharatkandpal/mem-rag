@@ -1,0 +1,60 @@
+.chunk {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  scroll-margin: var(--space-4);
+  transition:
+    border-color var(--dur-micro) var(--ease),
+    background var(--dur-micro) var(--ease),
+    box-shadow var(--dur-micro) var(--ease);
+}
+
+.chunk--highlighted {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.chunk__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.chunk__source {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chunk__cites {
+  display: inline-flex;
+  gap: 2px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chunk__cites sup {
+  font-size: 0.7em;
+}
+
+/* Push the score bar to the right. */
+.chunk__head .score-bar {
+  margin-left: auto;
+}
+
+.chunk__snippet {
+  margin: 0;
+  font-size: var(--fs-body-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

@@ -1,0 +1,27 @@
+.score-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.score-bar__track {
+  width: 72px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+
+.score-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.score-bar__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+  min-width: 2.5ch;
+}
