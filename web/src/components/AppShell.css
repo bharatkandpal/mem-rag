@@ -1,0 +1,65 @@
+.app-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Header is the first grid row (defined in Header.css); it stays put while the
+   middle row scrolls. */
+.app-shell__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The single centered conversation column (guide §2, §7). */
+.app-shell__column {
+  width: 100%;
+  max-width: var(--shell-max);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+.app-shell__scroll .app-shell__column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-8);
+}
+
+.app-shell__composer {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  padding: var(--space-4) 0 var(--space-3);
+}
+
+.app-shell__hint {
+  margin: var(--space-2) var(--space-1) 0;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.app-shell__hint kbd {
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .app-shell__column {
+    padding: 0 var(--space-4);
+  }
+  .app-shell__scroll .app-shell__column {
+    padding-top: var(--space-4);
+  }
+}

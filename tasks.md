@@ -11,7 +11,7 @@
 - [x] RAG-1 — NestJS + TypeScript project (`package.json`, `tsconfig`, `nest-cli`)  · TDD §1
 - [x] RAG-2 — Global config via `@nestjs/config` (env-driven)  · TDD §3
 - [x] RAG-3 — Postgres `pg` Pool as injectable `PG_POOL`  · TDD §2.2
-- [x] RAG-4 — `db/init/001_init.sql`: `vector` extension + `chunks` table + HNSW index  · TDD §2.2
+- [x] RAG-4 — `vector` extension + `chunks` table + HNSW index  · TDD §2.2 — now `db/migrations/001_init.sql` (moved from `db/init/`, applied by the RAG-46 migration runner)
 - [x] RAG-5 — `GET /healthz` (DB reachable + pgvector present → 200/503)  · TDD §2.6
 - [x] RAG-6 — Dockerfile + `docker-compose.yml` (app + pgvector), `.dockerignore`  · TDD §4
 - [x] RAG-7 — `.env.example` with all keys  · TDD §3
@@ -61,7 +61,7 @@
 
 > ✅ **Gate lifted 2026-07-28 — RAG-63 (observability framework) landed.** The user-facing surface now has request tracing / metrics / error surfacing behind it (correlation id is surfaced in the error body for the UI's `ErrorState`, GO-21e-h). UI is low-effort (the `/query` contract already returns `{answer, citations[], chunks[], citationsSupported}`).
 >
-> 🧭 **Sliced 2026-07-23** → [`subtasks/GO-21e.md`](subtasks/GO-21e.md) (RAG-31/32/33 re-cut into GO-21e-a…h). **Stack: React + Vite + TS; polish: full** (a deliberate revisit of the PRD "no UI polish" non-goal for the portfolio demo). Design guide: [`docs/ui-design-guide.md`](docs/ui-design-guide.md). GO-21e-b (`web/` scaffold — React+Vite+TS, dev proxy, typed `fetchQuery`, `types.ts` mirroring the contract) **done 2026-07-29**. Next actionable = **GO-21e-c (design tokens + `AppShell`).**
+> 🧭 **Sliced 2026-07-23** → [`subtasks/GO-21e.md`](subtasks/GO-21e.md) (RAG-31/32/33 re-cut into GO-21e-a…h). **Stack: React + Vite + TS; polish: full** (a deliberate revisit of the PRD "no UI polish" non-goal for the portfolio demo). Design guide: [`docs/ui-design-guide.md`](docs/ui-design-guide.md). GO-21e-b (`web/` scaffold) + GO-21e-c (design tokens + `AppShell`: both themes, Header/StatusBadge/Composer/EmptyState, autofocus + ⌘/Ctrl+Enter) **done 2026-07-29**. Next actionable = **GO-21e-d (query happy path → satisfies RAG-31).**
 
 - [ ] RAG-31 — Single-page chat UI calling `/query`  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-d)
 - [ ] RAG-32 — Render answer + clickable citations  · TDD §2.7 → sliced (see subtasks/GO-21e.md: GO-21e-f)
@@ -122,8 +122,8 @@
 - [x] RAG-43 — Secrets env-only; confirm none committed/logged  · rule `ai-and-secrets.md` — audited: `.env` git-ignored + never tracked; no key patterns in tracked files; no keys in logger calls
 - [x] RAG-44 — Jest setup + unit tests (chunking, adapters)  · TDD §3 — chunker, loader, Voyage adapter, pgvector store, retrieval, generation + eval-metrics specs all in place
 - [x] RAG-45 — Integration test: `/query` happy path  · TDD §3 — full DI graph over HTTP (supertest); happy path + abstain (provider never called) + 400 validation; process-boundary adapters replaced at their tokens
-- [ ] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4
-- [ ] RAG-47 — Pin deps / lockfile committed; clean commit history  · PRD §5
+- [x] RAG-46 — Proper migration runner for deploy (vs. initdb-only)  · TDD §4 — `src/database/migrate.ts` (`npm run migrate` / `dist/database/migrate.js`): applies pending `db/migrations/*.sql` in order, each transactional (DDL + ledger insert commit atomically), tracked in a `schema_migrations` ledger; idempotent, single schema authority. Schema moved `db/init/001_init.sql` → `db/migrations/001_init.sql`; initdb mount replaced by a one-shot compose `migrate` service (both compose files) that seed+app wait on; baked into the image (Dockerfile `COPY db/migrations`) for k8s (RAG-64). Smoke-verified on a fresh volume: applied 001, created chunks+HNSW+ledger, second run "up to date", exit 0. Unblocks RAG-64 / RAG-66e.
+- [x] RAG-47 — Pin deps / lockfile committed; clean commit history  · PRD §5 — both manifests (root + `web/`) exact-pinned to the versions the committed lockfiles already resolved; lockfiles reconciled (`--package-lock-only` → "up to date", zero resolved-version changes), `npm ci --dry-run` + typecheck green on both packages. Lockfiles were already tracked; carets → exact closes `npm install` drift.
 - [~] RAG-50 — Keep `doc/codemap.md` current after every code change (ongoing)  · rule `coding-standards.md`, `codemap` skill
 - [~] RAG-51 — Append to `doc/LEARNINGS.md` after each build slice (ongoing)  · the revisit/teach log, distinct from ADRs
 - [x] RAG-56 — Second `EmbeddingProvider` impl, env-selected — proves the swap seam. **Chosen: in-process transformers.js** (`TransformersEmbeddingProvider`, `@huggingface/transformers`, default `Xenova/bge-large-en-v1.5`) — the local / no-key / no-rate-limit story Voyage can't, with no separate server (deliberate deviation from the "Ollama / OpenAI-compatible" hint, which stays a future variant). Picked a **1024-dim** model → clean config swap, no migration (dims trap avoided). Eval before → after: **hit-rate 10/10 → 10/10, precision@5 0.43 → 0.50, abstain-rate 4/6 → 4/6**, with `MIN_SCORE` re-calibrated **0.3 → 0.59** (model-specific floor; probe data in RAG-56f). Re-ingested + eval-run against an isolated `rag_bge` DB so the Voyage corpus stayed intact.  · PRD FR-2 acceptance, TDD §2.1, GO-21 quality bar, `add-adapter` + `db-migration` skills  → sliced + delivered (see `subtasks/RAG-56.md`)

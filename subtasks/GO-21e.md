@@ -15,7 +15,7 @@
 |----|----------|-----------|------------|
 | GO-21e-a | **Write & commit the UI design guide** — tokens, component set, citation interaction, the four render branches, tech/integration | `docs/ui-design-guide.md` committed and reviewed | — *(done 2026-07-23)* |
 | GO-21e-b | **Scaffold `web/` (React + Vite + TS)** — Vite dev proxy `/query` → Nest, lint/format, `web/src/types.ts` mirroring the `QueryResult` contract, one typed `fetchQuery()` | `npm run dev` in `web/` serves a shell that can call `/query` in dev; types compile against the server contract | RAG-63 (gate) — *(done 2026-07-29)* |
-| GO-21e-c | **Implement design tokens + `AppShell`** — CSS vars for both themes, type/spacing scale, `Header` + `StatusBadge` + `Composer` + `EmptyState` per the guide | Empty shell matches the guide's layout at desktop + mobile, light + dark; composer autofocused, `⌘/Ctrl+Enter` wired | GO-21e-a, GO-21e-b |
+| GO-21e-c | **Implement design tokens + `AppShell`** — CSS vars for both themes, type/spacing scale, `Header` + `StatusBadge` + `Composer` + `EmptyState` per the guide | Empty shell matches the guide's layout at desktop + mobile, light + dark; composer autofocused, `⌘/Ctrl+Enter` wired | GO-21e-a, GO-21e-b — *(done 2026-07-29)* |
 | GO-21e-d | **Build the query happy path** — composer → `POST /query` → render `answer`; `LoadingAnswer` skeleton/caret while in flight | Asking a question returns and renders a grounded answer with no layout shift | GO-21e-c · **satisfies RAG-31** |
 | GO-21e-e | **Render the honest states** — `AbstainCard` (`--info`, verbatim message), `ErrorState` (`--danger`, retry), `CapabilityNote` when `!citationsSupported` | All four §6 branches + loading/error render distinctly; abstain is not styled as an error | GO-21e-d |
 | GO-21e-f | **Render citations + Sources** — inline numbered markers + accessible `CitationPopover` (`citedText`/`source`, mapped via `documentIndex`) and a collapsible `SourcesPanel` (`chunks[]` + `ScoreBar`) | Clicking a citation reveals its source span and highlights the matching chunk; sources list shows every retrieved chunk with score | GO-21e-d · **satisfies RAG-32** |
@@ -29,4 +29,7 @@ explicitly out of scope even at full polish (see guide §8).
 
 **Start here:** GO-21e-a (design guide) and GO-21e-b (`web/` scaffold — React + Vite + TS,
 dev proxy, typed `fetchQuery`, `types.ts` mirroring the contract) are **done** (2026-07-29).
-The next actionable move is **GO-21e-c** (design tokens + `AppShell`).
+GO-21e-c (design tokens + `AppShell` — both themes, `Header`/`StatusBadge`/`Composer`/`EmptyState`,
+composer autofocus + ⌘/Ctrl+Enter) is **done** (2026-07-29). The next actionable move is
+**GO-21e-d** (the query happy path — composer → `POST /query` → render the answer, replacing the
+interim result view; satisfies RAG-31).

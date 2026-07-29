@@ -1,86 +1,74 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useReducer } from 'react';
+import { AppShell } from './components/AppShell';
+import { EmptyState } from './components/EmptyState';
 import { fetchQuery, QueryError } from './api';
-import type { QueryResult } from './types';
+import { initialState, reducer } from './state';
+import './interim.css';
 
 /**
- * GO-21e-b scaffold shell — a deliberately minimal harness that proves the
- * `/query` contract end-to-end in dev (composer → `fetchQuery` → render the
- * raw result). The real citation-first UI (AppShell, tokens, the four render
- * branches) is built on top of this in GO-21e-c…h; this component is expected
- * to be replaced, not extended.
+ * GO-21e-c wires the AppShell (tokens, header, composer, empty state) around a
+ * `useReducer` query flow. The designed Conversation / AnswerBody / SourcesPanel
+ * and the four state cards land in GO-21e-d…f; until then the non-empty phases
+ * render the clearly-marked interim view below so the flow stays functional.
  */
-
-type Status = 'idle' | 'loading' | 'done' | 'error';
-
 export default function App() {
-  const [question, setQuestion] = useState('');
-  const [status, setStatus] = useState<Status>('idle');
-  const [result, setResult] = useState<QueryResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(reducer, initialState);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    const q = question.trim();
-    if (!q || status === 'loading') return;
-
-    setStatus('loading');
-    setError(null);
-    setResult(null);
+  const submit = useCallback(async (question: string) => {
+    dispatch({ type: 'submit', question });
     try {
-      setResult(await fetchQuery(q));
-      setStatus('done');
+      dispatch({ type: 'success', result: await fetchQuery(question) });
     } catch (err) {
-      const suffix =
-        err instanceof QueryError && err.correlationId ? ` (trace: ${err.correlationId})` : '';
-      setError(`${err instanceof Error ? err.message : String(err)}${suffix}`);
-      setStatus('error');
+      dispatch({
+        type: 'failure',
+        error:
+          err instanceof QueryError
+            ? { message: err.message, correlationId: err.correlationId }
+            : { message: err instanceof Error ? err.message : String(err) },
+      });
     }
-  }
+  }, []);
+
+  const citationsSupported = state.result?.citationsSupported ?? null;
 
   return (
-    <main className="shell">
-      <header>
-        <h1>RAG · knowledge-store chat</h1>
-        <p className="scaffold-note">
-          GO-21e-b scaffold — verifies the <code>/query</code> contract in dev. The designed UI
-          lands in GO-21e-c…h.
-        </p>
-      </header>
+    <AppShell
+      citationsSupported={citationsSupported}
+      onSubmit={submit}
+      busy={state.phase === 'loading'}
+    >
+      {state.phase === 'empty' ? <EmptyState onPick={submit} /> : <InterimResult state={state} />}
+    </AppShell>
+  );
+}
 
-      <form className="composer" onSubmit={onSubmit}>
-        <input
-          type="text"
-          value={question}
-          placeholder="Ask a question about the corpus…"
-          onChange={(e) => setQuestion(e.target.value)}
-          autoFocus
-        />
-        <button type="submit" disabled={status === 'loading' || !question.trim()}>
-          {status === 'loading' ? 'Asking…' : 'Ask'}
-        </button>
-      </form>
+/** Placeholder result view — replaced by the designed components in GO-21e-d…f. */
+function InterimResult({ state }: { state: ReturnType<typeof reducer> }) {
+  return (
+    <div className="interim">
+      {state.question && <p className="interim__question">{state.question}</p>}
 
-      {status === 'error' && <p className="error">{error}</p>}
+      {state.phase === 'loading' && <p className="interim__meta">Retrieving &amp; generating…</p>}
 
-      {status === 'done' && result && (
-        <section className="result">
-          <p className="badges">
-            {result.abstained && <span className="badge info">abstained</span>}
-            {result.grounded && <span className="badge ok">grounded</span>}
-            {!result.citationsSupported && (
-              <span className="badge warn">citations unsupported</span>
-            )}
-            <span className="badge">
-              {result.citations.length} citation{result.citations.length === 1 ? '' : 's'}
-            </span>
-            <span className="badge">
-              {result.chunks.length} chunk{result.chunks.length === 1 ? '' : 's'}
-            </span>
+      {(state.phase === 'answered' || state.phase === 'abstained') && state.result && (
+        <>
+          <p className="interim__answer">{state.result.answer}</p>
+          <p className="interim__meta">
+            {state.phase === 'abstained' ? 'abstained · ' : ''}
+            {state.result.citations.length} citation
+            {state.result.citations.length === 1 ? '' : 's'} · {state.result.chunks.length} chunk
+            {state.result.chunks.length === 1 ? '' : 's'}
+            {!state.result.citationsSupported && ' · citations unsupported'}
           </p>
-          <p className="answer">{result.answer}</p>
-          <pre className="raw">{JSON.stringify(result, null, 2)}</pre>
-        </section>
+        </>
       )}
-    </main>
+
+      {state.phase === 'error' && state.error && (
+        <p className="interim__error">
+          {state.error.message}
+          {state.error.correlationId ? ` (trace: ${state.error.correlationId})` : ''}
+        </p>
+      )}
+    </div>
   );
 }

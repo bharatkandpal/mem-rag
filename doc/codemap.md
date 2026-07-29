@@ -18,11 +18,14 @@
 - **Serves:** `web/public/index.html` — single-page chat UI (vanilla, no build) that POSTs `/query` and renders the cited answer + a References panel; baked into the image (`Dockerfile COPY web/public`) and bind-mounted for live edits (`docker-compose.yml`). *(GO-21e-g will repoint this at the `web/` React build.)*
 
 ### `web/` — chat UI (React 18 + Vite + TS, GO-21e)
-Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffolded in GO-21e-b. Dev server proxies `/query` (+ `/query/general`), `/healthz`, `/metrics` → Nest (`vite.config.ts`, `publicDir:false` so it doesn't claim the legacy `web/public/` prototype). The designed UI (tokens, AppShell, four render branches) lands in GO-21e-c…h.
+Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffolded in GO-21e-b. Dev server proxies `/query` (+ `/query/general`), `/healthz`, `/metrics` → Nest (`vite.config.ts`, `publicDir:false` so it doesn't claim the legacy `web/public/` prototype). GO-21e-c added the design-token system + `AppShell`; the four render branches (Conversation/AnswerBody/SourcesPanel/state cards) land in GO-21e-d…f.
 - **`web/src/types.ts`** — `Citation`, `RetrievedChunk`, `QueryResult` — a mirror of `QueryResult` in `src/generation/generation.service.ts` (server is source of truth); keep in lockstep.
 - **`web/src/api.ts`** — `fetchQuery(question, signal?): Promise<QueryResult>` (the only network surface) + `QueryError` (carries `status` + `correlationId` from the RAG-63 error body / `x-request-id`).
-- **`web/src/App.tsx`** — `App` — GO-21e-b scaffold shell (composer → `fetchQuery` → raw render); replaced by the real UI in GO-21e-c…h.
-- **`web/src/main.tsx`** — React root mount.
+- **`web/src/state.ts`** — `AppState`/`Phase`/`Action`/`QueryError` + `reducer`, `initialState` — the one-query-flow reducer (`empty→loading→answered|abstained|error`); `success` picks `answered` vs `abstained` from `result.abstained`. Used by `App.tsx`.
+- **`web/src/hooks/useTheme.ts`** — `useTheme()` → `{theme, toggle}`; mirrors `data-theme` on `<html>` + persists to `localStorage` (`rag-theme`), defaulting to OS preference. Paired with the pre-paint script in `index.html`.
+- **`web/src/App.tsx`** — `App` — composes `AppShell` + `EmptyState` around the reducer + `fetchQuery`; non-empty phases use an interim result view (placeholder for GO-21e-d…f, styled by `interim.css`).
+- **`web/src/main.tsx`** — React root mount (imports `index.css` → `styles/tokens.css`).
+- **`web/src/components/`** (GO-21e-c) — `AppShell` (theme owner + 3-row grid: header/scroll/composer), `Header`, `StatusBadge` (`citationsSupported: boolean|null` → citations/no-citations/idle), `ThemeToggle`, `Composer` (autofocus, auto-grow, ⌘/Ctrl+Enter), `EmptyState` (intro + example-question chips). Each has a co-located `.css`; all colors/spacing reference tokens.
 
 ### `src/app.module.ts`
 - **Purpose:** Root module — wires global config + feature modules.
