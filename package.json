@@ -1,14 +1,27 @@
 {
   "name": "rag-knowledge-store",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "RAG knowledge-store chat with citation-grounded answers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "bin": {
     "rag": "dist/cli/main.js"
   },
   "scripts": {
     "build": "nest build",
     "migrate": "node dist/database/migrate.js",
+    "prepack": "npm run build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit",

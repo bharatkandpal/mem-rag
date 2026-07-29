@@ -10,5 +10,7 @@ import { IngestionService } from './ingestion.service';
 @Module({
   providers: [IngestionService, DocumentLoader],
   controllers: [IngestionController],
+  // Exported so RagModule (the embeddable surface, RAG-66) can re-export it to a host.
+  exports: [IngestionService],
 })
 export class IngestionModule {}

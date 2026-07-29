@@ -4,11 +4,22 @@
 >
 > **Maintenance:** update after any code change — use the `codemap` skill (or dispatch the `codemap-updater` agent). Keep the "Last updated" line and the indexes in sync with `src/` and `eval/`.
 >
-> **Last updated:** RAG-67 key-free local slice — `TransformersEmbeddingProvider.defaultLoader` honours `TRANSFORMERS_CACHE` (relocatable weight cache off the read-only `node_modules` path); Dockerfile pre-creates a nonroot-owned `/hf-cache` + sets `TRANSFORMERS_CACHE`; new `docker-compose.local.yml` overlay runs the stack key-free (transformers embeddings + Ollama generation). Prior: RAG-57 floor calibration — `MIN_SCORE` default 0.2 → 0.3; eval harness gains should-abstain entries (`relevant_doc_ids: []`), `computeAbstain`, an abstain-rate summary + gate (`EVAL_MIN_ABSTAIN_RATE`), and `eval/probe-scores.ts` (ad-hoc score-distribution probe).
+> **Last updated:** RAG-66b embeddable surface — new `src/index.ts` (public library barrel: `RagModule` + `IngestionService`/`RetrievalService`/`GenerationService` + adapter seams/types) and `src/rag.module.ts` (`RagModule.forRoot()` dynamic module composing the feature modules, env-first); `IngestionModule`/`GenerationModule` now `exports` their service so `RagModule` can re-export it; `package.json` made importable (`private:false`, `main`/`types`/`exports`/`files`, `prepack`); `tsconfig` `declaration:true` for shipped `.d.ts`. Prior: RAG-67 key-free local slice — `TransformersEmbeddingProvider.defaultLoader` honours `TRANSFORMERS_CACHE` (relocatable weight cache off the read-only `node_modules` path); Dockerfile pre-creates a nonroot-owned `/hf-cache` + sets `TRANSFORMERS_CACHE`; new `docker-compose.local.yml` overlay runs the stack key-free (transformers embeddings + Ollama generation).
 
 ---
 
 ## Files
+
+### `src/index.ts`
+- **Purpose:** Public library barrel (GO-21j / RAG-66b) — the supported API surface for embedding RAG into a host project. Nothing outside this file is part of the package's public API; the `rag init` generator (RAG-66d) writes host wiring that imports from here.
+- **Re-exports:** `RagModule` (`./rag.module`) · `IngestionService`/`RetrievalService`/`GenerationService` + `QueryResult` type · adapter seams + tokens: `EMBEDDING_PROVIDER`+`EmbeddingProvider`, `VECTOR_STORE`+`VectorStore`/`ChunkInput`/`RetrievedChunk`, `GENERATION_PROVIDER`+`GenerationProvider`/`Citation`/`GenerationOutput`
+- **Used by:** package consumers via `main`/`types`/`exports` → `dist/index.js` (host `import { RagModule } from 'rag-knowledge-store'`)
+
+### `src/rag.module.ts`
+- **Purpose:** The embeddable entry point (GO-21j / RAG-66b) — a host adds one import, `RagModule.forRoot()`, and gets the whole pipeline. Composes the existing feature modules and re-exports the three services; re-implements nothing. Env-first (typed override surface — `http`/`k`/`minScore`/provider — lands in RAG-66c).
+- **Defines:** `RagModule` (class) · `RagModule.forRoot(): DynamicModule`
+- **Imports (in forRoot):** `ConfigModule.forRoot({ isGlobal: true })`, `DatabaseModule`, `EmbeddingModule`, `VectorStoreModule`, `IngestionModule`, `RetrievalModule`, `GenerationModule`; **re-exports** `IngestionModule`/`RetrievalModule`/`GenerationModule`
+- **Used by:** `src/index.ts` (barrel); a host `AppModule` (via the generated `src/rag/rag.module.ts`, RAG-66d)
 
 ### `src/main.ts`
 - **Purpose:** App entrypoint — bootstraps Nest, serves the static chat UI (`useStaticAssets` → `../web/public`, same origin as `/query`), reads `PORT`, starts the HTTP server.
@@ -76,9 +87,9 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 - **Used by:** `src/generation/generation.module.ts` (controller); route consumed by clients/UI
 
 ### `src/generation/generation.module.ts`
-- **Purpose:** Generation feature module — imports `RetrievalModule`; binds `GENERATION_PROVIDER` via an env-selected factory (`GENERATION_PROVIDER` env: `anthropic` default | `openai-compatible`). Constructs the Anthropic client locally inside the `anthropic` branch only — no client is built when a different provider is selected.
+- **Purpose:** Generation feature module — imports `RetrievalModule`; binds `GENERATION_PROVIDER` via an env-selected factory (`GENERATION_PROVIDER` env: `anthropic` default | `openai-compatible`). Constructs the Anthropic client locally inside the `anthropic` branch only — no client is built when a different provider is selected. **Exports `GenerationService`** (so `RagModule` can re-export it to a host, RAG-66).
 - **Defines:** `GenerationModule` (class) · `GENERATION_PROVIDER` factory (`useFactory`)
-- **Used by:** `src/app.module.ts`
+- **Used by:** `src/app.module.ts`, `src/rag.module.ts` (re-exported)
 
 ### `src/retrieval/retrieval.service.ts`
 - **Purpose:** Retrieval (RAG-20/23) — embed query → store cosine top-k → drop below min-score floor. Owns k + floor policy (config); returns `[]` to enable abstain (D5). Observes the top-hit (pre-floor) score to `rag_retrieval_score` (RAG-63e).
@@ -89,7 +100,7 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 ### `src/retrieval/retrieval.module.ts`
 - **Purpose:** Retrieval feature module — provides + exports `RetrievalService` (no controller; reached via `/query`).
 - **Defines:** `RetrievalModule` (class)
-- **Used by:** `src/app.module.ts`
+- **Used by:** `src/app.module.ts`, `src/rag.module.ts` (re-exported)
 
 ### `src/ingestion/ingestion.service.ts`
 - **Purpose:** The ingestion pipeline (RAG-16) — `load → chunk → embed → upsert`; thin orchestrator over the loader + the two adapter interfaces. Records `rag_ingest_docs_total` / `rag_ingest_chunks_total` (RAG-63e).
@@ -104,9 +115,9 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 - **Used by:** `src/ingestion/ingestion.module.ts` (controller); route consumed by clients
 
 ### `src/ingestion/ingestion.module.ts`
-- **Purpose:** Ingestion feature module — provides `IngestionService` + `DocumentLoader`, registers the controller.
+- **Purpose:** Ingestion feature module — provides `IngestionService` + `DocumentLoader`, registers the controller, **exports `IngestionService`** (so `RagModule` can re-export it to a host, RAG-66).
 - **Defines:** `IngestionModule` (class)
-- **Used by:** `src/app.module.ts`
+- **Used by:** `src/app.module.ts`, `src/rag.module.ts` (re-exported)
 
 ### `src/ingestion/document-loader.ts`
 - **Purpose:** Load a corpus (file or dir) into `LoadedDocument[]` (RAG-14). Handles `.md`/`.txt`, skips others; PDF is a later slice.

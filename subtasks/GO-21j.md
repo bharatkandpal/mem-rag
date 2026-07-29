@@ -13,7 +13,7 @@
 | ID | Sub-task | Done when | Depends on |
 |----|----------|-----------|------------|
 | RAG-66a | **Write the approach guide** — two surfaces, the four settled forks, `forRoot` shape, the file set, DoD | `docs/embeddable-scaffold-guide.md` committed and reviewed | — *(done 2026-07-24)* |
-| RAG-66b | **Make the package importable** — `private:false`; add `main`/`types`/`exports`/`files`; `src/index.ts` barrel exporting `RagModule` + `IngestionService`/`RetrievalService`/`GenerationService` + seams/types; `npm pack` clean (no `.env`/fixtures/secrets) | A sibling project can `npm i` (file:/tarball) and `import { RagModule }`; `npm pack` ships `dist` only | RAG-66a |
+| ✅ RAG-66b | **Make the package importable** — `private:false`; add `main`/`types`/`exports`/`files`; `src/index.ts` barrel exporting `RagModule` + `IngestionService`/`RetrievalService`/`GenerationService` + seams/types; `npm pack` clean (no `.env`/fixtures/secrets) | A sibling project can `npm i` (file:/tarball) and `import { RagModule }`; `npm pack` ships `dist` only | RAG-66a — **done 2026-07-29**: barrel + `RagModule.forRoot()` (env-first) + `declaration:true` + `files:['dist']`; `Ingestion`/`Generation` modules now export their service; 115 tests green, pack = 169 files dist+manifest only |
 | RAG-66c | **`RagModule.forRoot(options)` dynamic module** — composes the existing feature modules, re-exports the services; env-first defaults with optional overrides (`embeddingProvider`, `generationProvider`, `k`, `minScore`, `http`) | `RagModule.forRoot({})` boots the full graph from env; an override (e.g. `k`) takes effect; `http:false` omits controllers | RAG-66b |
 | RAG-66d | **`rag init` subcommand (scaffold writer)** — third `commander` command in `src/cli/main.ts`; writes the §4 file set into `--target` (cwd default); idempotent (skip-existing, `--force`, `--dry-run`); prints next-steps | Running in an empty dir writes the file set; re-run is safe; `--dry-run` writes nothing | RAG-66c |
 | RAG-66e | **Migration/DB path** — emit `chunks`/HNSW as a migration the host runs (not initdb-only); honor host `DATABASE_URL`; carry the `VECTOR(1024)` dims-trap comment | A scaffolded host applies the schema via the migration runner and ingest works | RAG-66d, **RAG-46** |
@@ -24,7 +24,9 @@
 leaning on RAG-46, importable+local-install, env-first `forRoot`). Deferred (not decisions,
 scope cuts): non-Nest/standalone hosts, `npm publish`, embedded auth/multi-tenant.
 
-**Start here:** RAG-66a is done (the approach guide). The next actionable move is **RAG-66b**
-(make the package importable) — it's **not gated** (RAG-46 only blocks RAG-66e), so the package
-surface + `forRoot` + the generator writer (b → c → d) can all proceed now; pull **RAG-46**
-forward in parallel to unblock the DB path (e) and land the host smoke (g).
+**Start here:** RAG-66a (approach guide) and RAG-66b (importable surface — barrel +
+`RagModule.forRoot()` env-first + `declaration`/`files`/`exports`) are **done**. The next
+actionable move is **RAG-66c** (add the typed `forRoot(options)` surface: `http` controller
+toggle + `k`/`minScore`/provider overrides). It's **not gated** (RAG-46 only blocks RAG-66e), so
+c → d can proceed now; pull **RAG-46** forward in parallel to unblock the DB path (e) and land
+the host smoke (g).

@@ -48,5 +48,7 @@ import { OpenAICompatibleGenerationProvider } from './openai-compatible-generati
     },
   ],
   controllers: [GenerationController],
+  // Exported so RagModule (the embeddable surface, RAG-66) can re-export it to a host.
+  exports: [GenerationService],
 })
 export class GenerationModule {}

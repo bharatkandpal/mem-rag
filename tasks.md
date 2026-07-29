@@ -101,7 +101,7 @@
 >
 > 🧭 **Sliced 2026-07-24** → [`subtasks/GO-21j.md`](subtasks/GO-21j.md) (RAG-66a…g; forks settled — Nest-first host, migration-based DB, importable+local-install, env-first `forRoot`). Approach note: [`docs/embeddable-scaffold-guide.md`](docs/embeddable-scaffold-guide.md). Next actionable = RAG-66b (make package importable, not gated); **RAG-66e depends on RAG-46** (migration runner — shared with RAG-64).
 
-- [ ] RAG-66 — **`rag init` scaffolding generator — design + build**: target detection, the file set written, `RagModule.forRoot()` config surface, idempotent re-run, and the importable-package surface. **Slice before building** (`task-slice`).  · GO-21j, `cli` + `nest-module` skills → sliced (see subtasks/GO-21j.md)
+- [ ] RAG-66 — **`rag init` scaffolding generator — design + build**: target detection, the file set written, `RagModule.forRoot()` config surface, idempotent re-run, and the importable-package surface. **Slice before building** (`task-slice`).  · GO-21j, `cli` + `nest-module` skills → sliced (see subtasks/GO-21j.md) — **RAG-66b done 2026-07-29** (importable package surface: `src/index.ts` barrel + `RagModule.forRoot()` env-first + `private:false`/`main`/`types`/`exports`/`files`/`declaration:true`; `npm pack` = dist+manifest only, no secrets). Next: RAG-66c (typed `forRoot` options).
 
 ## Milestone GO-21k — Plug-and-play self-hosted bundle: `docker compose up`  (Integrator persona) — ✅ **DONE**
 
