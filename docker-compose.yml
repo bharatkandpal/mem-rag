@@ -1,7 +1,33 @@
-# One-command run (PRD FR-7): `docker compose up` → app + pgvector live.
+# Plug-and-play, fully KEY-FREE self-host (RAG-67 / GO-21k). One command:
+#
+#   docker compose up --build
+#
+# Brings up the WHOLE stack with NO API keys: pgvector + a bundled Ollama model
+# server + the app (local in-process transformers.js embeddings + Ollama generation
+# through the OpenAI-compatible seam) + a one-shot seed of eval/sample-corpus, so
+# /query answers out of the box on a fresh boot. Nothing to configure, no host Ollama.
+#
+# Want Voyage + Anthropic (Claude) with NATIVE span-level citations? That's the opt-in
+# cloud profile — a standalone file that needs the two keys:
+#
+#   docker compose -f docker-compose.cloud.yml up --build      # see docker-compose.cloud.yml
+#
+# Trade-offs (flagged, not buried):
+#  - Bundled Ollama is CPU-only on Docker Desktop / Apple Silicon (no GPU passthrough),
+#    so generation is slower than a host GPU model. qwen2.5:3b is chosen to stay usable
+#    on CPU. Faster on a Mac? Run host Ollama and point the app's GENERATION_BASE_URL at
+#    http://host.docker.internal:11434/v1, then comment out the ollama + ollama-pull
+#    services and app's ollama-pull dependency below.
+#  - The OpenAI-compatible generation surface has NO native citations
+#    (citationsSupported:false); grounded retrieval + the abstain guarantee still hold.
+#    Span-level citations are Claude-only → use the cloud profile.
+#  - Switching an existing DB between this (bge/transformers) and the cloud (Voyage)
+#    profile: the seed re-ingests and upserts, but the two embedders occupy different
+#    1024-dim spaces — `docker compose down -v` first for a clean swap. MIN_SCORE differs
+#    too (0.60 bge here vs 0.3 Voyage) and is set per profile.
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.1-pg16      # pinned (RAG-67e); digest-pin before publishing
     environment:
       POSTGRES_USER: rag
       POSTGRES_PASSWORD: rag
@@ -17,29 +43,89 @@ services:
       timeout: 3s
       retries: 10
 
+  # Bundled local LLM server — no host Ollama, no keys (RAG-67b).
+  ollama:
+    image: ollama/ollama:0.32.1              # pinned (RAG-67e)
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # One-shot: pull the generation model into the server's volume, then exit (RAG-67b).
+  ollama-pull:
+    image: ollama/ollama:0.32.1
+    environment:
+      OLLAMA_HOST: "ollama:11434"            # target the server container, not localhost
+    entrypoint: ["ollama", "pull", "qwen2.5:3b"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  # One-shot first-boot seed (RAG-67d): ingest eval/sample-corpus so /query works
+  # immediately. Reuses the app image + the same local-embeddings env; idempotent
+  # (RAG-19 — re-runs upsert on UNIQUE(doc_id, chunk_index), row count stays stable).
+  seed:
+    build: .
+    image: rag:local
+    command: ["dist/cli/main.js", "ingest", "/app/eval/sample-corpus"]
+    environment:
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag
+      EMBEDDING_PROVIDER: transformers
+      EMBEDDING_MODEL: Xenova/bge-large-en-v1.5
+      TRANSFORMERS_CACHE: /hf-cache
+      ANTHROPIC_API_KEY: ""
+      VOYAGE_API_KEY: ""
+    volumes:
+      - ./eval/sample-corpus:/app/eval/sample-corpus:ro
+      - hfcache:/hf-cache
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   app:
     build: .
+    image: rag:local
     environment:
       DATABASE_URL: postgresql://rag:rag@db:5432/rag
       PORT: 3000
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-voyage}
-      RETRIEVAL_K: ${RETRIEVAL_K:-5}
-      MIN_SCORE: ${MIN_SCORE:-0.3}
-      GENERATION_PROVIDER: ${GENERATION_PROVIDER:-anthropic}
-      GENERATION_MODEL: ${GENERATION_MODEL:-claude-opus-4-8}
-      GENERATION_BASE_URL: ${GENERATION_BASE_URL:-}
-      GENERATION_API_KEY: ${GENERATION_API_KEY:-}
+      # No keys — the local providers need none.
+      ANTHROPIC_API_KEY: ""
+      VOYAGE_API_KEY: ""
+      # Local, in-process embeddings (transformers.js) — no key, no network at query time once cached.
+      EMBEDDING_PROVIDER: transformers
+      EMBEDDING_MODEL: Xenova/bge-large-en-v1.5
+      TRANSFORMERS_CACHE: /hf-cache
+      # bge-large's calibrated absolute-cosine floor (RAG-56/67) — NOT Voyage's 0.3.
+      MIN_SCORE: "0.60"
+      RETRIEVAL_K: "5"
+      # Local generation via the bundled Ollama (OpenAI-compatible). No native citations.
+      GENERATION_PROVIDER: openai-compatible
+      GENERATION_BASE_URL: http://ollama:11434/v1
+      GENERATION_MODEL: qwen2.5:3b
+      GENERATION_API_KEY: ""
+      METRICS_ENABLED: "true"
     ports:
       - "3000:3000"
     volumes:
       - ./eval/sample-corpus:/app/eval/sample-corpus:ro
       # Live-editable chat UI: edit web/public + restart the app, no rebuild.
       - ./web/public:/app/web/public:ro
+      - hfcache:/hf-cache
     depends_on:
       db:
         condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
+  hfcache:
+  ollama-models:

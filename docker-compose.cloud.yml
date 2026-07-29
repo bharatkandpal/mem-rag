@@ -1,0 +1,78 @@
+# Opt-in CLOUD profile (RAG-67f) — Voyage embeddings + Anthropic (Claude) generation
+# with NATIVE span-level citations. This is the full-citation experience.
+#
+# Standalone (NOT an overlay) — run it with a single -f so no bundled Ollama starts:
+#
+#   cp .env.example .env          # set VOYAGE_API_KEY + ANTHROPIC_API_KEY
+#   docker compose -f docker-compose.cloud.yml up --build
+#
+# The default `docker compose up` is fully key-free (bundled local models, no citations)
+# — see docker-compose.yml. Switching between profiles reuses the same pgdata volume but
+# the two embedders occupy different vector spaces: `docker compose down -v` for a clean
+# swap.
+services:
+  db:
+    image: pgvector/pgvector:0.8.1-pg16      # pinned (RAG-67e); digest-pin before publishing
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot first-boot seed (RAG-67d) — ingest eval/sample-corpus with Voyage embeddings
+  # so /query answers on a fresh boot. Idempotent (upsert on UNIQUE(doc_id, chunk_index)).
+  seed:
+    build: .
+    image: rag:local
+    command: ["dist/cli/main.js", "ingest", "/app/eval/sample-corpus"]
+    environment:
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag
+      EMBEDDING_PROVIDER: voyage
+      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-4-lite}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:?set VOYAGE_API_KEY in .env for the cloud profile}
+    volumes:
+      - ./eval/sample-corpus:/app/eval/sample-corpus:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build: .
+    image: rag:local
+    environment:
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag
+      PORT: 3000
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env for the cloud profile}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:?set VOYAGE_API_KEY in .env for the cloud profile}
+      EMBEDDING_PROVIDER: voyage
+      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-4-lite}
+      # Voyage's calibrated floor (RAG-57). Different embedder → different floor than the
+      # key-free bge default (0.60).
+      MIN_SCORE: ${MIN_SCORE:-0.3}
+      RETRIEVAL_K: ${RETRIEVAL_K:-5}
+      GENERATION_PROVIDER: anthropic
+      GENERATION_MODEL: ${GENERATION_MODEL:-claude-opus-4-8}
+      METRICS_ENABLED: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./eval/sample-corpus:/app/eval/sample-corpus:ro
+      - ./web/public:/app/web/public:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
