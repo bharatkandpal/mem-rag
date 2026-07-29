@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 import { Command } from 'commander';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
@@ -8,7 +9,8 @@ import { IngestionService } from '../ingestion/ingestion.service';
 import { GenerationService } from '../generation/generation.service';
 import { CorrelatedLogger } from '../observability/correlated-logger';
 import { runWithCorrelation } from '../observability/correlation.als';
-import { formatIngestStats, formatQueryResult } from './format';
+import { formatIngestStats, formatInitResult, formatQueryResult } from './format';
+import { runInit } from './init';
 
 /**
  * The `rag` CLI (GO-21h, RAG-52): a terminal front-end over the same services
@@ -61,6 +63,24 @@ program
       const result = await app.get(GenerationService).generate(question);
       console.log(formatQueryResult(result));
     });
+  });
+
+program
+  .command('init')
+  .description(
+    'Scaffold the RAG capability into a host project (RagModule wiring, env, compose, schema)',
+  )
+  .option('--target <dir>', 'directory to scaffold into', process.cwd())
+  .option('--force', 'overwrite files that already exist', false)
+  .option('--dry-run', 'report what would be written, without touching the filesystem', false)
+  .action(async (opts: { target: string; force: boolean; dryRun: boolean }) => {
+    // No app context here — init only writes files, no DB/adapter access needed.
+    const result = await runInit({
+      target: resolve(opts.target),
+      force: opts.force,
+      dryRun: opts.dryRun,
+    });
+    console.log(formatInitResult(result, opts.dryRun));
   });
 
 program.parseAsync().catch((err: unknown) => {

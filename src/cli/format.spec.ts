@@ -1,5 +1,6 @@
-import { formatIngestStats, formatQueryResult } from './format';
+import { formatIngestStats, formatInitResult, formatQueryResult } from './format';
 import { QueryResult } from '../generation/generation.service';
+import { InitResult } from './init';
 
 describe('formatIngestStats', () => {
   it('reports docs, chunks, path, and duration', () => {
@@ -49,5 +50,35 @@ describe('formatQueryResult', () => {
   it('adds no capability note when a citation-capable provider returns none', () => {
     const out = formatQueryResult(base);
     expect(out).toBe('pgvector stores embeddings in Postgres.');
+  });
+});
+
+describe('formatInitResult', () => {
+  const result: InitResult = {
+    target: '/tmp/host-app',
+    files: [
+      { relativePath: 'src/rag/rag.module.ts', outcome: 'written' },
+      { relativePath: '.env.rag.example', outcome: 'skipped' },
+    ],
+  };
+
+  it('lists each file with a human outcome and prints next steps', () => {
+    const out = formatInitResult(result, false);
+    expect(out).toContain('/tmp/host-app');
+    expect(out).toContain('src/rag/rag.module.ts — written');
+    expect(out).toContain('.env.rag.example — skipped (already exists — use --force to overwrite)');
+    expect(out).toContain('Next steps:');
+    expect(out).toContain('HostRagModule');
+  });
+
+  it('reports a dry run without next steps', () => {
+    const dryResult: InitResult = {
+      target: '/tmp/host-app',
+      files: [{ relativePath: 'src/rag/rag.module.ts', outcome: 'would-write' }],
+    };
+    const out = formatInitResult(dryResult, true);
+    expect(out).toContain('would write (--dry-run)');
+    expect(out).toContain('Dry run — no files were written.');
+    expect(out).not.toContain('Next steps:');
   });
 });
