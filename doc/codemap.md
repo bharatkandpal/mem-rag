@@ -11,11 +11,11 @@
 ## Files
 
 ### `src/main.ts`
-- **Purpose:** App entrypoint — bootstraps Nest, serves the static chat UI (`useStaticAssets` → `../web/public`, same origin as `/query`), reads `PORT`, starts the HTTP server.
+- **Purpose:** App entrypoint — bootstraps Nest, serves the built React chat UI (`useStaticAssets` → `../web/dist`, same origin as `/query`; GO-21e-g/RAG-33), reads `PORT`, starts the HTTP server.
 - **Defines:** `bootstrap(): Promise<void>`
 - **Depends on:** `AppModule` (`./app.module`), `ConfigService` (`@nestjs/config`), `NestFactory`, `NestExpressApplication` (`@nestjs/platform-express`), `join` (`path`), `Logger`, `CorrelatedLogger` (`./observability/correlated-logger`, via `app.useLogger` — RAG-63c)
 - **Used by:** — (entrypoint; self-invoked via `void bootstrap()`)
-- **Serves:** `web/public/index.html` — single-page chat UI (vanilla, no build) that POSTs `/query` and renders the cited answer + a References panel; baked into the image (`Dockerfile COPY web/public`) and bind-mounted for live edits (`docker-compose.yml`). *(GO-21e-g will repoint this at the `web/` React build.)*
+- **Serves:** `web/dist/` — the built React chat UI (Vite), same origin as `/query` (GO-21e-g). Built by the `web-build` Dockerfile stage (`vite build` → `/web/dist`) and copied into the image (`COPY --from=web-build /web/dist ./web/dist`). The legacy vanilla `web/public/` prototype is no longer served or mounted.
 
 ### `web/` — chat UI (React 18 + Vite + TS, GO-21e)
 Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffolded in GO-21e-b. Dev server proxies `/query` (+ `/query/general`), `/healthz`, `/metrics` → Nest (`vite.config.ts`, `publicDir:false` so it doesn't claim the legacy `web/public/` prototype). GO-21e-c added the design-token system + `AppShell`; the four render branches (Conversation/AnswerBody/SourcesPanel/state cards) land in GO-21e-d…f.
