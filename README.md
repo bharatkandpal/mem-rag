@@ -271,6 +271,61 @@ Thin and in-process on purpose — same "no framework" ethos as the rest of the 
 
 Everything is env-driven — see [`.env.example`](.env.example). The interesting knobs: `EMBEDDING_PROVIDER`, `GENERATION_PROVIDER` (`anthropic` | `openai-compatible` — point the latter at Ollama/vLLM for fully-local generation), `RETRIEVAL_K`, `MIN_SCORE`, `CHUNK_TOKENS`/`OVERLAP_TOKENS`, `EVAL_MIN_HIT_RATE`/`EVAL_MIN_ABSTAIN_RATE`, `METRICS_ENABLED` (default `true`; gates `/metrics` + the process collectors).
 
+## Embed in your project
+
+The pipeline is also an **importable library**, not just an HTTP service — `rag init`
+scaffolds it into any NestJS host in one command. Not published to npm yet, so install it
+as a local tarball or `file:` dependency first:
+
+```bash
+# in this repo
+npm run build && npm pack                 # → rag-knowledge-store-0.1.0.tgz (dist + manifest only)
+
+# in your host project
+npm install /path/to/rag-knowledge-store-0.1.0.tgz
+npx rag init                               # scaffolds into the current directory
+npx rag init --target ./apps/api           # or a specific one
+npx rag init --dry-run                     # preview only — writes nothing
+```
+
+`npm run rag -- init [...]` works too (note the `--` — without it, `npm run` swallows
+`--target`/`--force`/`--dry-run` as its own flags instead of forwarding them; `npx` doesn't
+have this problem, so prefer it when passing flags).
+
+`rag init` writes four files into the host (skips any that already exist — `--force` to
+overwrite):
+
+| File | Purpose |
+|---|---|
+| `src/rag/rag.module.ts` | `HostRagModule` — the one import your `AppModule` adds |
+| `.env.rag.example` | keys + retrieval knobs, env-first — the same keys the standalone app reads |
+| `docker-compose.rag.yml` | optional, self-contained pgvector for local dev (port 5433) |
+| `db/rag/001_init.sql` | the `chunks`/HNSW schema — `VECTOR(1024)`, pinned to Voyage's dimensionality |
+
+Add `HostRagModule` to your `AppModule`, then apply the schema with the migration runner the
+package already ships — no new tooling needed:
+
+```bash
+MIGRATIONS_DIR=db/rag DATABASE_URL=postgresql://rag:rag@localhost:5433/rag \
+  node node_modules/rag-knowledge-store/dist/database/migrate.js
+```
+
+From there, inject `IngestionService` / `RetrievalService` / `GenerationService` anywhere in
+your app. `RagModule.forRoot()` is env-first with an optional code-level override for every
+knob — same seams the standalone app uses, no new ones:
+
+```ts
+RagModule.forRoot({
+  embeddingProvider?: 'voyage' | 'transformers' | EmbeddingProvider,
+  generationProvider?: 'anthropic' | 'openai-compatible' | GenerationProvider,
+  k?: number,          // default RETRIEVAL_K
+  minScore?: number,   // default MIN_SCORE
+  http?: boolean,       // default false — also register POST /ingest, /query, /query/general?
+})
+```
+
+Full design notes and the settled forks: [`docs/embeddable-scaffold-guide.md`](docs/embeddable-scaffold-guide.md).
+
 ## What I'd add with more time
 
 - **Multi-agent orchestration** — a router that decomposes multi-hop questions into sub-queries over the same retrieval substrate (deliberately out of scope this iteration; see `DESIGN_DECISIONS.md` D8).
