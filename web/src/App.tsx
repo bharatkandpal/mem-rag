@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell';
 import { EmptyState } from './components/EmptyState';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { Conversation } from './components/Conversation';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { fetchQuery, QueryError } from './api';
 import { activeExchange, init, phaseOf, reducer, saveHistory } from './state';
 
@@ -85,7 +86,9 @@ export default function App() {
         {active === null ? (
           <EmptyState onPick={submit} />
         ) : (
-          <Conversation exchange={active} phase={phase} onRetry={retry} />
+          <ErrorBoundary>
+            <Conversation exchange={active} phase={phase} onRetry={retry} />
+          </ErrorBoundary>
         )}
       </AppShell>
     </>

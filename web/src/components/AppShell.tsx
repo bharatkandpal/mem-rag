@@ -43,7 +43,7 @@ export function AppShell({
         onToggleHistory={onToggleHistory}
         historyOpen={historyOpen}
       />
-      <main className="app-shell__scroll" aria-live="polite">
+      <main className="app-shell__scroll">
         <div className="app-shell__column">{children}</div>
       </main>
       <div className="app-shell__composer">

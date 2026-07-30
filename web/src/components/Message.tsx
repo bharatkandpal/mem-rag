@@ -10,7 +10,10 @@ export function Message({ role, children }: { role: 'user' | 'assistant'; childr
           ◇
         </span>
       )}
-      <div className="msg__body">{children}</div>
+      {/* Announce the assistant's reply once it settles (design guide §8). */}
+      <div className="msg__body" aria-live={role === 'assistant' ? 'polite' : undefined}>
+        {children}
+      </div>
     </div>
   );
 }
