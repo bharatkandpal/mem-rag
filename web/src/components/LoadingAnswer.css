@@ -6,12 +6,32 @@
   padding-top: var(--space-1);
 }
 
+.loading-answer__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .loading-answer__line {
   height: 12px;
   border-radius: var(--r-sm);
   background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
   background-size: 400% 100%;
   animation: loading-shimmer 1.4s ease infinite;
+}
+
+/* The ticking status line — what keeps a long (10-30s) local-model wait from
+   reading as frozen: something visibly changes every second regardless of
+   whether the shimmer itself is running (see prefers-reduced-motion below). */
+.loading-answer__status {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+
+.loading-answer__timer {
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes loading-shimmer {
