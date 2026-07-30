@@ -81,6 +81,12 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 - **Depends on:** `GenerationProvider`/`GenerationOutput` (interface), `Logger`, global `fetch`; `baseUrl`/`model`/`apiKey` (ctor args)
 - **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=openai-compatible`)
 
+### `src/generation/citation-verifying-generation.provider.ts` (RAG-68)
+- **Purpose:** Wraps any other `GenerationProvider` and independently verifies which answer sentences are actually supported by the retrieved chunks — longest-contiguous-common-word-run matching against each chunk's real `content`, crediting a citation only above a conservative bar (`minMatchWords=6`, `minOverlapRatio=0.6` by default). Never trusts the wrapped provider's own claims (there are none — it's typically `OpenAICompatibleGenerationProvider`, always `[]`). `citedText` is sliced verbatim from the matching **chunk** (not the answer) — the same "quote from source" semantics as Claude's `char_location` citations, which is what makes `supportsCitations: true` honest here (rule `ai-and-secrets.md`: verification, not prompt-engineered fabrication). Limit: lexical, not semantic — a paraphrase with little exact word overlap is missed (uncited), never mis-credited.
+- **Defines:** `CitationVerifyingGenerationProvider` (class, `name = citation-verifying(<inner.name>)`) · `.generate()` · `.generateGeneral()` (delegates unchanged — nothing to verify on the ungrounded path) · private `.verify(answer, chunks): Citation[]` · file-private helpers `tokenize`, `splitSentences`, `longestCommonRun`
+- **Depends on:** `GenerationProvider`/`GenerationOutput`/`Citation` (interface), the wrapped `inner: GenerationProvider` (ctor arg)
+- **Used by:** `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=citation-verifying`, wraps `CITATION_VERIFY_INNER_PROVIDER`)
+
 ### `src/generation/generation.service.ts`
 - **Purpose:** Generation orchestration (RAG-25-30, D4) — retrieve → abstain-on-empty (D5, provider-agnostic policy) → delegate to the configured `GenerationProvider` for the model call. Records `rag_query_total{outcome}` (grounded/abstained/general) + `rag_generation_duration_seconds{provider}` (RAG-63e).
 - **Defines:** `GenerationService` (class) · `GenerationService.generate(question): Promise<QueryResult>` · `.generateGeneral(question): Promise<QueryResult>` (opt-in ungrounded; bypasses retrieval; `grounded:false`) · `QueryResult` (interface, incl. `citationsSupported`, `grounded`)
@@ -95,7 +101,7 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 
 ### `src/generation/generation.module.ts`
 - **Purpose:** Generation feature module (RAG-66c). `@Module()` decorator carries **only** `GenerationService` + the default (env-only) `GENERATION_PROVIDER` factory — deliberately **no `imports`/`controllers`**, because Nest concatenates a class's static decorator metadata with a `DynamicModule`'s own `imports`/`controllers` rather than replacing them (confirmed via `@nestjs/core/scanner.js`'s `reflectImports`/`reflectControllers`); a decorator-level `imports:[RetrievalModule]` would sit alongside `register()`'s override-aware `RetrievalModule.register(options.retrieval)` as a second, differently-tokened instance, and DI would silently wire `GenerationService` to the wrong one (confirmed via a failing test before the fix — the decorator's plain-import instance won). `providers` concatenation is safe (Nest's provider map is keyed by token, last `.set()` wins) — that's what lets the `generationProvider` override on the *decorator-listed* `GENERATION_PROVIDER` factory work correctly. `register()` is therefore the **only** way this module is ever imported (`AppModule` included) — single source of truth.
-- **Defines:** `GenerationModule` (class) · `GenerationModule.register(options?: GenerationModuleOptions): DynamicModule` · `GenerationModuleOptions` (interface: `generationProvider`, `http`, `retrieval`) · `resolveGenerationProvider(config, override?)` · `GenerationProviderName` (type: `'anthropic' | 'openai-compatible'`)
+- **Defines:** `GenerationModule` (class) · `GenerationModule.register(options?: GenerationModuleOptions): DynamicModule` · `GenerationModuleOptions` (interface: `generationProvider`, `http`, `retrieval`) · `resolveGenerationProvider(config, override?)` (RAG-68: `citation-verifying` recurses through this same function to resolve `CITATION_VERIFY_INNER_PROVIDER`, so it can wrap any other named provider) · `GenerationProviderName` (type: `'anthropic' | 'openai-compatible' | 'citation-verifying'`)
 - **Used by:** `src/app.module.ts` (`.register({http:true})`), `src/rag.module.ts` (`.register({...})`, captured + re-exported by reference)
 
 ### `src/retrieval/retrieval.service.ts`
@@ -306,6 +312,7 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 | `GENERATION_PROVIDER` | DI token | `src/generation/generation-provider.interface.ts` | `src/generation/generation.service.ts`, `src/generation/generation.module.ts` |
 | `AnthropicGenerationProvider` | class | `src/generation/anthropic-generation.provider.ts` | `src/generation/generation.module.ts` (factory, default) |
 | `OpenAICompatibleGenerationProvider` | class | `src/generation/openai-compatible-generation.provider.ts` | `src/generation/generation.module.ts` (factory) |
+| `CitationVerifyingGenerationProvider` | class | `src/generation/citation-verifying-generation.provider.ts` | `src/generation/generation.module.ts` (factory, `GENERATION_PROVIDER=citation-verifying`) |
 | `GenerationService` | class | `src/generation/generation.service.ts` | generation controller, module |
 | `QueryResult` | interface | `src/generation/generation.service.ts` | generation service + controller |
 | `GenerationController` | class | `src/generation/generation.controller.ts` | `src/generation/generation.module.ts` |
@@ -368,6 +375,7 @@ Separate npm package (`web/package.json`, own `node_modules`/lockfile), scaffold
 | `GENERATION_MODEL` | `src/generation/generation.module.ts` (factory → provider ctor) | claude-opus-4-8 (anthropic) |
 | `GENERATION_BASE_URL` | `src/generation/generation.module.ts` (factory, `openai-compatible` branch only) | — |
 | `GENERATION_API_KEY` | `src/generation/generation.module.ts` (factory, `openai-compatible` branch only) | — |
+| `CITATION_VERIFY_INNER_PROVIDER` | `src/generation/generation.module.ts` (factory, `citation-verifying` branch only) | openai-compatible |
 | `VOYAGE_API_KEY` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider`) | — |
 | `VOYAGE_MODEL` | `src/embedding/embedding.module.ts` (→ `VoyageEmbeddingProvider` ctor) | voyage-4-lite |
 | `EMBEDDING_PROVIDER` | `src/embedding/embedding.module.ts` (factory selection) | voyage (or transformers) |

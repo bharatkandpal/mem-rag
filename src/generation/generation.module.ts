@@ -8,16 +8,19 @@ import { GenerationService } from './generation.service';
 import { GENERATION_PROVIDER, GenerationProvider } from './generation-provider.interface';
 import { AnthropicGenerationProvider } from './anthropic-generation.provider';
 import { OpenAICompatibleGenerationProvider } from './openai-compatible-generation.provider';
+import { CitationVerifyingGenerationProvider } from './citation-verifying-generation.provider';
 
-export type GenerationProviderName = 'anthropic' | 'openai-compatible';
+export type GenerationProviderName = 'anthropic' | 'openai-compatible' | 'citation-verifying';
 
 /**
  * Builds the `GenerationProvider` bound to `GENERATION_PROVIDER`. `override` is
  * the RAG-66c `RagModule.forRoot({ generationProvider })` seam: a concrete
  * `GenerationProvider` instance is used as-is (a host supplying its own model
- * integration); a name (`'anthropic' | 'openai-compatible'`) picks that impl
- * instead of reading env; `undefined` falls back to `GENERATION_PROVIDER` env,
- * exactly as before RAG-66c. Claude remains the default either way.
+ * integration); a name (`GenerationProviderName`) picks that impl instead of
+ * reading env; `undefined` falls back to `GENERATION_PROVIDER` env, exactly as
+ * before RAG-66c. Claude remains the default either way. `citation-verifying`
+ * recurses through this same function to resolve its wrapped provider, so it
+ * can wrap any of the others (including future ones) for free.
  */
 export function resolveGenerationProvider(
   config: ConfigService,
@@ -43,6 +46,17 @@ export function resolveGenerationProvider(
         config.get<string>('GENERATION_MODEL', ''),
         config.get<string>('GENERATION_API_KEY'),
       );
+    // Wraps another provider and independently verifies citations against the
+    // real chunk text (see the class doc) — for providers without a native
+    // citations API, e.g. the local/key-free stack's `openai-compatible`.
+    case 'citation-verifying': {
+      const innerName = config.get<string>('CITATION_VERIFY_INNER_PROVIDER', 'openai-compatible');
+      if (innerName === 'citation-verifying') {
+        throw new Error('CITATION_VERIFY_INNER_PROVIDER cannot itself be citation-verifying');
+      }
+      const inner = resolveGenerationProvider(config, innerName as GenerationProviderName);
+      return new CitationVerifyingGenerationProvider(inner);
+    }
     default:
       throw new Error(`Unknown GENERATION_PROVIDER: ${name}`);
   }
