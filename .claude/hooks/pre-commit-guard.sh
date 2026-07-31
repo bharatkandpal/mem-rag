@@ -35,7 +35,7 @@ fi
 
 # Gate 2: retrieval-affecting files staged but no eval evidence in the message.
 # Evidence = the word "eval" (not the substring in "retrieval"), hit-rate, or precision.
-retrieval_staged=$(printf '%s\n' "$staged" | grep -E '^(src/ingestion/(chunker|tokenizer)\.ts|src/(retrieval|vector-store|embedding)/[^/]+\.ts|db/init/.*\.sql)$' | grep -v '\.spec\.ts$' || true)
+retrieval_staged=$(printf '%s\n' "$staged" | grep -E '^(src/ingestion/(chunker|tokenizer)\.ts|src/(retrieval|vector-store|embedding)/[^/]+\.ts|db/migrations/.*\.sql)$' | grep -v '\.spec\.ts$' || true)
 if [ -n "$retrieval_staged" ] && ! printf '%s' "$input" | grep -qiE '(^|[^[:alpha:]])eval|hit-?rate|precision'; then
   echo "Commit blocked (rule evals.md): retrieval-affecting files staged with no eval evidence in the commit message:" >&2
   printf '%s\n' "$retrieval_staged" >&2
