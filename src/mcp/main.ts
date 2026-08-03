@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AppModule } from '../app.module';
 import { GenerationService } from '../generation/generation.service';
 import { CorrelatedLogger } from '../observability/correlated-logger';
+import { registerQueryTool } from './rag-query.tool';
 
 /**
  * MCP server entrypoint (GO-21i / RAG-65) — a third entrypoint over the same
@@ -40,13 +41,15 @@ async function bootstrap(): Promise<void> {
   const generation = app.get(GenerationService);
 
   const server = new McpServer(SERVER_INFO);
-  // (No tools registered yet — RAG-65a is the empty-server slice.)
+  // rag_query (RAG-65b): the corpus Q&A tool over GenerationService. The gated
+  // rag_ingest (RAG-65d) and HTTP transport (RAG-65e) register in later slices.
+  registerQueryTool(server, generation);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
   logger.log(
     `MCP server "${SERVER_INFO.name}" v${SERVER_INFO.version} listening over stdio ` +
-      `(${generation.constructor.name} wired; 0 tools registered)`,
+      `(${generation.constructor.name} wired; tools: rag_query)`,
   );
 
   // Clean shutdown: tear down the MCP transport and the Nest context on signal.

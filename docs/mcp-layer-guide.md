@@ -131,9 +131,14 @@ Everything else is plumbing; this is the design.
   return **both** representations (D1):
   1. **Structured content** — the full `QueryResult` JSON (`answer`, `citations`, `chunks`,
      `abstained`, `grounded`, `citationsSupported`) so a programmatic agent renders citations itself.
-  2. **Text rendering** — the `answer` with inline `[n]` markers and a trailing
+  2. **Text rendering** — the `answer`, then a trailing numbered
      `[n] "<citedText>" — <source>` source list, for clients that only render text.
   This is the no-information-lost option and the recommended target.
+  **Implementation note (RAG-65b):** the source list is *trailing only*, not inline
+  `[n]` markers in the prose. Our `Citation` carries the **source** span
+  (`citedText`/`documentIndex`), not an offset into the answer text, so there is no
+  faithful position to inject a marker mid-sentence — synthesizing one would fabricate
+  provenance. Agents that need structure read `structuredContent` instead.
 - **Non-citation providers** (the `openai-compatible` adapter → `supportsCitations: false`, e.g. the
   key-free local-LLM bundle from RAG-67) must surface `citationsSupported: false` and `citations: []`
   through MCP and **never fabricate a citation** (`ai-and-secrets.md`). The MCP layer inherits this
@@ -217,7 +222,7 @@ Each has a concrete "done when". Not retrieval-affecting → `[eval-ok]` on ever
 | ID | Slice | Done when |
 |----|-------|-----------|
 | **RAG-65a** ✅ | **Entrypoint + SDK pin** — `src/mcp/main.ts` app-context bootstrap (`createApplicationContext`, `useLogger(new CorrelatedLogger('stderr'))`), resolve `GenerationService`; add `@modelcontextprotocol/sdk`; confirm `McpServer` / tool-registration / structured-content API against the installed version. No tools yet. | **Done 2026-08-03.** `@modelcontextprotocol/sdk@1.30.0` (exact-pinned; API confirmed: `registerTool`/`new McpServer({name,version})`/`StdioServerTransport`/Zod shapes). `npm run mcp` added; `tsc`+`nest build` clean. **Live-verified:** an `initialize` handshake returns `serverInfo {name:"rag", v0.1.0}` + negotiated protocol on **stdout**, readiness log on **stderr**, stdout protocol-only, 0 tools (empty server). |
-| **RAG-65b** | **`rag_query` over stdio** — register the tool, call `GenerationService.generate`, return **structured `QueryResult` + text rendering** (`[n]` markers + source list); abstain preserved. | A stdio MCP client (Claude Desktop/Code, or the SDK's client) gets a cited grounded answer, and a correct `grounded:false` abstain, over the corpus. |
+| **RAG-65b** ✅ | **`rag_query` over stdio** — register the tool, call `GenerationService.generate`, return **structured `QueryResult` + text rendering** (`[n]` markers + source list); abstain preserved. | **Done 2026-08-03.** `src/mcp/rag-query.tool.ts` (`registerQueryTool`) + `src/mcp/render.ts` + 4 renderer unit tests. Structured `QueryResult` (Zod `outputSchema`) **+** text with a numbered `Sources:` list. **Deviation:** trailing source list, *not* inline `[n]` markers — `Citation` carries the source span, not an answer offset (see §4 / LEARNINGS). **Live-verified** via a real stdio MCP `Client` over the seeded corpus + qwen2.5:3b: grounded question → `grounded:true` + retrieved chunk + model answer; out-of-corpus → `abstained:true`/`grounded:false` + verbatim message, no Sources. `citations:[]`/`citationsSupported:false` on the local provider is correct (native citations are Claude-only — the citation *mapping* is unit-tested in RAG-65c). |
 | **RAG-65c** | **Citation serialization + unit tests (both provider types)** — assert Anthropic path emits `citations[]` mapped to sources; assert `openai-compatible` path returns `citationsSupported:false` + `citations:[]` and the text rendering omits markers. | Tests green; a non-citation provider never fabricates a citation through MCP. |
 | **RAG-65d** | **`rag_ingest` behind `MCP_ENABLE_INGEST`** — register only when the flag is on; call `IngestionService`, return `{docs,chunks,ms}`. | Ingest works with the flag on; the tool is absent from the tool list with the flag off. |
 | **RAG-65e** | **Streamable HTTP transport + bearer auth** — `MCP_TRANSPORT=http`, `MCP_HTTP_PORT`, `MCP_AUTH_TOKEN` bearer check. | Anthropic's API MCP connector (`mcp-client-2025-11-20` + paired `mcp_toolset`) reaches `rag_query` and gets a cited answer; a request with a wrong/missing bearer is rejected. |
