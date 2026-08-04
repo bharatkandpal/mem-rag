@@ -157,6 +157,34 @@ npm run eval     # runs the eval harness; exits non-zero below the hit-rate / ab
 
 See [Retrieval quality](#retrieval-quality--the-eval-gate) for the baseline numbers.
 
+### 8. Expose the corpus to AI agents (MCP)
+
+The pipeline is also an **[MCP](https://modelcontextprotocol.io) server** — a third entrypoint (alongside the HTTP API and CLI) that lets any MCP-capable agent (Claude Desktop/Code, custom agents, the Anthropic API MCP connector) query the corpus as a **tool**, with the same grounding + abstain guarantees. It reuses the same in-process services — no duplicated pipeline.
+
+```bash
+npm run build
+npm run mcp                    # serves over stdio (default) — for local agents
+```
+
+Tools:
+
+| Tool | What it does | Notes |
+|------|--------------|-------|
+| `rag_query` | Answers a question over the corpus; returns a grounded answer + citations, or an honest `grounded:false` "not in the corpus" result. | Always on. Result carries the full `QueryResult` (`grounded`/`abstained`/`citations`) as structured content, so an agent can branch on it without parsing prose. |
+| `rag_ingest` | Chunks, embeds, and indexes a filesystem path into the corpus (idempotent). | **Off by default** — set `MCP_ENABLE_INGEST=true` to expose it (corpus-write is a capability grant). |
+
+**Transports** (`MCP_TRANSPORT`):
+
+- `stdio` (default) — the server runs as a subprocess; no auth (parent-process trust). Register it with a local agent, e.g. Claude Desktop's config, pointing at `node dist/mcp/main.js`.
+- `http` — Streamable HTTP for remote agents and the Anthropic API MCP connector. **Requires `MCP_AUTH_TOKEN`** (bearer); the server refuses to start over HTTP without one.
+
+```bash
+MCP_TRANSPORT=http MCP_HTTP_PORT=3001 MCP_AUTH_TOKEN=your-secret npm run mcp
+# → POST http://localhost:3001/mcp  with  Authorization: Bearer your-secret
+```
+
+The MCP layer is a transport, not new logic: grounding and abstain are inherited from `GenerationService`, verified end-to-end by an answer-eval pass through the tool (10/10 answerable stay grounded, abstain behavior matches the direct `/query` path).
+
 ### Troubleshooting
 
 - **`healthz` shows `db: false`** — pgvector isn't up yet; give it a few seconds on first boot or check `docker compose logs db`.
@@ -184,7 +212,7 @@ flowchart LR
   end
 ```
 
-Two entrypoints (HTTP API, CLI) and the eval harness all drive the **same services in-process** — no duplicated pipeline logic. The browser chat UI (served by the app at `/`) sits on top of the HTTP API as a thin client, not a fourth pipeline.
+Three entrypoints (HTTP API, CLI, and an [MCP server](#8-expose-the-corpus-to-ai-agents-mcp)) and the eval harness all drive the **same services in-process** — no duplicated pipeline logic. The browser chat UI (served by the app at `/`) sits on top of the HTTP API as a thin client, not another pipeline.
 
 ## Key design decisions
 
